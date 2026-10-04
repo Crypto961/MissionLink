@@ -15,6 +15,7 @@
   </div>
   <div class="header-actions">
     <span class="role-pill role-triage"><span class="dot" aria-hidden="true"></span>Triage</span>
+    <button type="button" class="exit-link" data-claude-settings>Claude AI</button>
     <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
   </div>
 </header>
@@ -104,10 +105,21 @@
     <div class="transcript-box" id="transcript" aria-hidden="true">Tap the mic, or type below.</div>
     <div class="field" style="margin-top:8px;">
       <label for="complaintText">Chief complaint <span aria-hidden="true">*</span></label>
-      <textarea id="complaintText" required aria-required="true" aria-describedby="complaintErr categoryLine" placeholder="Appears here as it's spoken, or type directly"></textarea>
+      <textarea id="complaintText" required aria-required="true" aria-describedby="complaintErr" placeholder="Appears here as it's spoken, or type directly"></textarea>
       <p class="small" id="complaintErr" style="color:var(--danger); margin:4px 0 0;" hidden>Capture the chief complaint first.</p>
     </div>
-    <p class="small" id="categoryLine">Sorted as: <span class="badge badge-amber" id="categoryBadge">—</span></p>
+    <div class="btn-row" style="align-items:center;">
+      <button type="button" class="btn btn-secondary" id="btnAnalyze">Summarise &amp; sort with Claude</button>
+      <span class="small muted" id="aiHint"></span>
+    </div>
+    <div id="aiResult" aria-live="polite"></div>
+
+    <div class="field" style="margin-top:12px; max-width:320px;">
+      <label for="categorySelect">Routing category</label>
+      <select id="categorySelect" aria-describedby="categoryLine"></select>
+      <p class="small muted" id="categoryLine" style="margin-top:4px;">Sorted by: <span id="categorySource">—</span>. Change it if it's wrong.</p>
+    </div>
+    <label class="check" for="markUrgent"><input type="checkbox" id="markUrgent"> Mark as urgent for the physician</label>
 
     <button type="button" class="btn btn-primary btn-block" id="btnSendToDoctor" style="margin-top:10px;">Send to physician queue</button>
   </section>
@@ -119,12 +131,88 @@
 <script src="js/db.js"></script>
 <script src="js/lookup.js"></script>
 <script src="js/speech.js"></script>
+<script src="js/claude.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="js/qr.js"></script>
 <script>
 db_seedIfEmpty();
 
 let activePatient = null;
+let activeLocale = "en-US";
+let aiAnalysis = null;      // Claude's last result for the current complaint text
+let categorySource = "keywords";
+
+qs("#categorySelect").innerHTML = COMPLAINT_CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
+qs("#categorySelect").addEventListener("change", () => setCategory(qs("#categorySelect").value, "nurse"));
+
+function setCategory(key, source){
+  categorySource = source;
+  qs("#categorySelect").value = key;
+  qs("#categorySource").textContent = { keywords:"keyword rules", claude:"Claude", nurse:"you (nurse)" }[source];
+}
+
+function updateAiHint(){
+  const on = claudeConfigured();
+  qs("#btnAnalyze").hidden = !on;
+  qs("#aiHint").innerHTML = on ? "Runs automatically when you stop speaking."
+    : `Claude AI is off on this device — <button type="button" class="btn-ghost" style="border:0; background:none; padding:0; font:inherit; text-decoration:underline; color:var(--teal-dark); cursor:pointer;" data-claude-settings-inline>set it up</button> to get English summaries and smarter sorting.`;
+  const inline = qs("[data-claude-settings-inline]");
+  if(inline) inline.addEventListener("click", openClaudeSettings);
+}
+document.addEventListener("claude-settings-changed", updateAiHint);
+
+function clearAi(){
+  aiAnalysis = null;
+  qs("#aiResult").innerHTML = "";
+}
+
+async function runClaude(){
+  const text = qs("#complaintText").value.trim();
+  if(!activePatient || !text || !claudeConfigured()) return;
+  const btn = qs("#btnAnalyze");
+  btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
+  qs("#aiResult").innerHTML = `<p class="small muted" style="margin-top:8px;">Claude is reading the complaint…</p>`;
+  try {
+    const mission = missionForCode(activePatient.country);
+    const res = await claudeAnalyzeComplaint(text, {
+      language: mission.language, locale: activeLocale, age: activePatient.approxAge, sex: activePatient.sex
+    });
+    if(qs("#complaintText").value.trim() !== text) return; // text changed while waiting; result is stale
+    aiAnalysis = { ...res, source: text };
+    if(categorySource !== "nurse") setCategory(res.category, "claude");
+    renderAi(res);
+  } catch(err){
+    qs("#aiResult").innerHTML = `<p class="small" style="margin-top:8px; color:var(--danger);">${esc(err.message)} The keyword sorting below still works.</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+}
+
+function renderAi(res){
+  qs("#aiResult").innerHTML = `<div class="ai-panel">
+    <h4>Claude's summary — check before sending</h4>
+    <p class="small" style="margin:0 0 6px;"><strong>In English:</strong> ${esc(res.english_summary)}</p>
+    ${res.cleaned_transcript && res.cleaned_transcript !== qs("#complaintText").value.trim()
+      ? `<p class="small" style="margin:0 0 6px;"><strong>Cleaned transcript:</strong> ${esc(res.cleaned_transcript)}
+         <button type="button" class="btn btn-ghost" id="btnUseCleaned" style="min-height:32px; padding:2px 8px;">Use this text</button></p>` : ""}
+    ${res.danger_signs.length ? `<div class="danger small" role="note"><strong>Danger signs mentioned:</strong> ${esc(res.danger_signs.join(", "))}.
+       Consider marking this patient urgent.</div>` : ""}
+    ${res.follow_up_question ? `<p class="small" style="margin:0;"><strong>You could ask:</strong> ${esc(res.follow_up_question)}</p>` : ""}
+    <p class="small muted" style="margin:6px 0 0;">Sorted as ${esc(res.label)}. Claude restates and sorts; it doesn't diagnose.</p>
+  </div>`;
+  const use = qs("#btnUseCleaned");
+  if(use) use.addEventListener("click", () => {
+    qs("#complaintText").value = res.cleaned_transcript;
+    aiAnalysis = { ...aiAnalysis, source: res.cleaned_transcript };
+    use.parentElement.remove();
+    toast("Cleaned transcript applied");
+    qs("#complaintText").focus();
+  });
+}
+
+qs("#btnAnalyze").addEventListener("click", runClaude);
 
 function fillCountrySelects(){
   const opts = MISSIONS.map(m => `<option value="${m.code}">${m.country} — ${m.camp}</option>`).join("");
@@ -214,25 +302,40 @@ function openPatient(patient){
   qs("#transcript").textContent = "Tap the mic, or type below.";
   qs("#complaintText").value = "";
   showFieldError(qs("#complaintText"), qs("#complaintErr"), false);
-  qs("#categoryBadge").textContent = "—";
+  setCategory("other", "keywords");
+  qs("#categorySource").textContent = "—";
+  qs("#markUrgent").checked = false;
+  clearAi();
+  updateAiHint();
   ["#vBp","#vTemp","#vWeight","#vHeight"].forEach(id => qs(id).value = "");
 
   const micBtn = qs("#micBtn");
   const newMic = micBtn.cloneNode(true);
   micBtn.parentNode.replaceChild(newMic, micBtn);
-  attachSpeechToText(newMic, qs("#transcript"), {
-    lang: SPEECH_LANG_MAP[lang] || "en-US",
-    onInterim: (text) => { qs("#complaintText").value = text; updateCategory(); },
-    onFinal: (text) => { qs("#complaintText").value = text; updateCategory(); }
+  activeLocale = SPEECH_LANG_MAP[lang] || "en-US";
+  const rec = attachSpeechToText(newMic, qs("#transcript"), {
+    lang: activeLocale,
+    onInterim: (text) => { qs("#complaintText").value = text; clearAi(); updateCategory(); },
+    onFinal: (text) => {
+      qs("#complaintText").value = text;
+      if(rec) activeLocale = rec.currentLocale();
+      updateCategory();
+      runClaude();
+    }
   });
 
   focusEl(qs("#activeName"));
 }
 
-qs("#complaintText").addEventListener("input", updateCategory);
+qs("#complaintText").addEventListener("input", () => {
+  if(aiAnalysis && aiAnalysis.source !== qs("#complaintText").value.trim()) clearAi();
+  updateCategory();
+});
+// Keyword rules keep sorting live as text arrives; Claude's or the nurse's
+// choice takes over once made.
 function updateCategory(){
-  const res = classifyComplaint(qs("#complaintText").value);
-  qs("#categoryBadge").textContent = res.label;
+  if(categorySource === "nurse" || (categorySource === "claude" && aiAnalysis)) return;
+  setCategory(classifyComplaint(qs("#complaintText").value).key, "keywords");
 }
 
 qs("#btnSendToDoctor").addEventListener("click", () => {
@@ -245,18 +348,22 @@ qs("#btnSendToDoctor").addEventListener("click", () => {
     return;
   }
   showFieldError(complaintInput, qs("#complaintErr"), false);
-  const cat = classifyComplaint(complaintText);
+  const ai = aiAnalysis && aiAnalysis.source === complaintText ? aiAnalysis : null;
   const visit = {
     year: new Date().getFullYear(),
     date: new Date().toISOString().slice(0,10),
     vitals: { bp:qs("#vBp").value, temp:qs("#vTemp").value, weight:qs("#vWeight").value, height:qs("#vHeight").value },
     complaint: complaintText,
-    category: cat.key,
+    category: qs("#categorySelect").value,
+    categorySource,
+    complaintEnglish: ai ? ai.english_summary : "",
+    dangerSigns: ai ? ai.danger_signs : [],
     language: missionForCode(activePatient.country).language,
     diagnosis: "", prescription: [], labOrdered: false, note: ""
   };
   db_addVisit(activePatient.id, visit);
   db_moveToStation(activePatient.id, "physician");
+  if(qs("#markUrgent").checked) db_setUrgent(activePatient.id, true);
   toast(activePatient.name + " sent to physician queue");
   qs("#activeCard").style.display = "none";
   qs("#candidates").innerHTML = "";
