@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runner — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Runner</span></div>
+  </div>
+  <div class="header-actions">
+    <span class="role-pill role-runner"><span class="dot" aria-hidden="true"></span>Runner</span>
+    <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <h1 class="visually-hidden">Runner</h1>
+  <section aria-labelledby="statsHeading">
+    <h2 id="statsHeading" class="visually-hidden">Waiting at each station</h2>
+    <ul class="grid-3 queue-list" id="stationStats"></ul>
+  </section>
+
+  <section class="card" style="margin-top:14px;" aria-labelledby="findHeading">
+    <h2 id="findHeading">Find where a patient should go</h2>
+    <div class="field">
+      <label for="runnerSearch">Patient name</label>
+      <input type="search" id="runnerSearch" autocomplete="off" placeholder="Type a patient's name…" aria-describedby="runnerResults">
+    </div>
+    <div id="runnerResults" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="allHeading">
+    <h2 id="allHeading">Everyone currently in the system</h2>
+    <p class="small muted">Longest-waiting first — a good order to help move people along.</p>
+    <div id="fullQueue"></div>
+  </section>
+</main>
+<footer class="app-foot">MissionLink · Runner</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script>
+db_seedIfEmpty();
+
+const STATION_LABEL = { triage:"Triage", physician:"Physician", pharmacy:"Pharmacy" };
+const STATION_DIRECTION = {
+  triage:"Guide them to the triage tent — vitals and intake.",
+  physician:"Guide them to the physician's station.",
+  pharmacy:"Guide them to the pharmacy counter to collect medication."
+};
+
+function renderStats(){
+  const q = db_getQueue();
+  const counts = { triage:0, physician:0, pharmacy:0 };
+  q.forEach(e => { if(counts[e.station] !== undefined) counts[e.station]++; });
+  const el = qs("#stationStats");
+  renderIfChanged(el, JSON.stringify(counts), () => {
+    el.innerHTML = Object.keys(counts).map(k => `
+      <li class="stat">
+        <div class="num">${counts[k]}</div>
+        <div class="label">waiting at ${STATION_LABEL[k]}</div>
+      </li>
+    `).join("");
+  });
+}
+
+function renderFullQueue(){
+  const q = db_getQueue().slice().sort((a,b) => a.arrived.localeCompare(b.arrived));
+  const el = qs("#fullQueue");
+  renderIfChanged(el, JSON.stringify(q), () => {
+    if(q.length === 0){ el.innerHTML = `<p class="muted small">No one currently waiting.</p>`; return; }
+    el.innerHTML = `<ol class="queue-list">` + q.map(e => {
+      const p = db_getPatient(e.patientId);
+      if(!p) return "";
+      return `<li class="queue-item${e.urgent ? " urgent" : ""}">
+        <div class="queue-left">
+          <div class="avatar"><img src="${avatarDataUri(p.name)}" alt=""></div>
+          <div><div class="queue-name">${esc(p.name)}</div><div class="queue-meta">arrived ${esc(e.arrived)} · now at ${STATION_LABEL[e.station]}</div></div>
+        </div>
+        <span style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+          ${e.urgent ? '<span class="badge badge-danger">Urgent</span>' : ''}
+          <span class="badge badge-slate" aria-hidden="true">${STATION_LABEL[e.station]}</span>
+        </span>
+      </li>`;
+    }).join("") + `</ol>`;
+  });
+}
+
+qs("#runnerSearch").addEventListener("input", (e) => {
+  const term = e.target.value.trim().toLowerCase();
+  const el = qs("#runnerResults");
+  if(!term){ el.innerHTML = ""; return; }
+  const matches = db_getPatients().filter(p => p.name.toLowerCase().includes(term)).slice(0,5);
+  el.innerHTML = matches.length ? `<ul class="queue-list">` + matches.map(p => {
+    const entry = db_getQueue().find(e => e.patientId === p.id);
+    const station = entry ? entry.station : null;
+    return `<li class="match-card">
+      <div class="match-photo"><img src="${avatarDataUri(p.name)}" alt=""></div>
+      <div class="match-info">
+        <div class="match-name">${esc(p.name)}</div>
+        <div class="match-meta">${station ? "Next: " + STATION_LABEL[station] + " — " + STATION_DIRECTION[station] : "Not currently in the queue"}</div>
+      </div>
+    </li>`;
+  }).join("") + `</ul>` : `<p class="muted small">No match.</p>`;
+});
+
+renderStats();
+renderFullQueue();
+setInterval(() => { renderStats(); renderFullQueue(); }, 4000);
+</script>
+</body>
+</html>

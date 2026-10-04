@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Triage — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Triage nurse</span></div>
+  </div>
+  <div class="header-actions">
+    <span class="role-pill role-triage"><span class="dot" aria-hidden="true"></span>Triage</span>
+    <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <h1 class="visually-hidden">Triage</h1>
+
+  <section class="card" aria-labelledby="findHeading">
+    <h2 id="findHeading">1. Find or register the patient</h2>
+    <form id="searchForm" novalidate>
+      <div class="field-row">
+        <div class="field">
+          <label for="searchName">Name</label>
+          <input type="text" id="searchName" autocomplete="off" placeholder="Start typing a name…">
+        </div>
+        <div class="field" style="max-width:140px;">
+          <label for="searchAge">Approx. age</label>
+          <input type="number" id="searchAge" min="0" max="120" inputmode="numeric" placeholder="e.g. 34">
+        </div>
+        <div class="field" style="max-width:140px;">
+          <label for="searchSex">Sex</label>
+          <select id="searchSex"><option value="">Any</option><option value="M">Male (M)</option><option value="F">Female (F)</option></select>
+        </div>
+        <div class="field" style="max-width:220px;">
+          <label for="searchCountry">Camp</label>
+          <select id="searchCountry"><option value="">Any</option></select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-secondary" id="btnSearch">Find patient (lost card)</button>
+        <button type="button" class="btn btn-ghost" id="btnShowNew" aria-expanded="false" aria-controls="newPatientCard">+ Register new patient</button>
+      </div>
+    </form>
+    <div id="candidates" style="margin-top:12px;" aria-live="polite"></div>
+    <p class="muted small" style="margin-top:8px;">This compares name, age, sex and camp and shows each candidate's
+      stored photo for you to confirm by eye — it does not use facial recognition. See README for why.</p>
+  </section>
+
+  <section class="card" id="newPatientCard" style="display:none;" aria-labelledby="newHeading">
+    <h2 id="newHeading">Register new patient</h2>
+    <form id="newForm" novalidate>
+      <div class="field-row">
+        <div class="field"><label for="npName">Full name <span aria-hidden="true">*</span></label>
+          <input type="text" id="npName" autocomplete="off" required aria-required="true" aria-describedby="npNameErr">
+          <p class="small" id="npNameErr" style="color:var(--danger); margin:4px 0 0;" hidden>Enter the patient's name.</p></div>
+        <div class="field" style="max-width:120px;"><label for="npAge">Approx. age</label><input type="number" id="npAge" min="0" max="120" inputmode="numeric"></div>
+        <div class="field" style="max-width:140px;"><label for="npSex">Sex</label>
+          <select id="npSex"><option value="F">Female (F)</option><option value="M">Male (M)</option></select></div>
+      </div>
+      <div class="field">
+        <label for="npCountry">Camp</label>
+        <select id="npCountry"></select>
+      </div>
+      <button type="submit" class="btn btn-primary" id="btnCreate">Create pass and continue to vitals</button>
+    </form>
+  </section>
+
+  <section class="card" id="activeCard" style="display:none;" aria-labelledby="activeName">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+      <div>
+        <h2 id="activeName">—</h2>
+        <p class="muted" id="activeMeta"></p>
+      </div>
+      <div class="qr-wrap">
+        <div id="qrHolder"></div>
+        <div><span class="visually-hidden">Pass ID: </span><span class="id-chip" id="activeId"></span></div>
+      </div>
+    </div>
+
+    <div id="priorBrief"></div>
+
+    <h3 style="margin-top:14px;">2. Vitals</h3>
+    <p class="small muted" id="vitalsHelp">In production these fields are filled automatically by Bluetooth-paired BP cuffs,
+      pulse oximeters and thermometers as the device takes the reading. Typed here for the demo.</p>
+    <div class="grid-3">
+      <div class="field"><label for="vBp">Blood pressure (mmHg)</label><input type="text" id="vBp" placeholder="120/80" autocomplete="off"></div>
+      <div class="field"><label for="vTemp">Temperature (°C)</label><input type="text" id="vTemp" inputmode="decimal" placeholder="37.0" autocomplete="off"></div>
+      <div class="field"><label for="vWeight">Weight (kg)</label><input type="text" id="vWeight" inputmode="decimal" autocomplete="off"></div>
+    </div>
+    <div class="field" style="max-width:200px;"><label for="vHeight">Height (cm)</label><input type="text" id="vHeight" inputmode="decimal" autocomplete="off"></div>
+
+    <h3 style="margin-top:14px;" id="complaintHeading">3. Chief complaint</h3>
+    <div class="btn-row" style="margin-bottom:8px; align-items:center;">
+      <button type="button" class="mic-btn" id="micBtn" aria-describedby="langLabel"><span class="mic-dot" aria-hidden="true"></span><span id="micLabel" data-mic-label>Tap to speak</span></button>
+      <span class="muted small" id="langLabel"></span>
+    </div>
+    <div class="transcript-box" id="transcript" aria-hidden="true">Tap the mic, or type below.</div>
+    <div class="field" style="margin-top:8px;">
+      <label for="complaintText">Chief complaint <span aria-hidden="true">*</span></label>
+      <textarea id="complaintText" required aria-required="true" aria-describedby="complaintErr categoryLine" placeholder="Appears here as it's spoken, or type directly"></textarea>
+      <p class="small" id="complaintErr" style="color:var(--danger); margin:4px 0 0;" hidden>Capture the chief complaint first.</p>
+    </div>
+    <p class="small" id="categoryLine">Sorted as: <span class="badge badge-amber" id="categoryBadge">—</span></p>
+
+    <button type="button" class="btn btn-primary btn-block" id="btnSendToDoctor" style="margin-top:10px;">Send to physician queue</button>
+  </section>
+
+</main>
+<footer class="app-foot">MissionLink · Triage</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="js/lookup.js"></script>
+<script src="js/speech.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="js/qr.js"></script>
+<script>
+db_seedIfEmpty();
+
+let activePatient = null;
+
+function fillCountrySelects(){
+  const opts = MISSIONS.map(m => `<option value="${m.code}">${m.country} — ${m.camp}</option>`).join("");
+  qs("#npCountry").innerHTML = opts;
+  qs("#searchCountry").innerHTML += opts;
+}
+fillCountrySelects();
+
+function setNewCardOpen(open){
+  qs("#newPatientCard").style.display = open ? "block" : "none";
+  qs("#btnShowNew").setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function showFieldError(input, errEl, show){
+  errEl.hidden = !show;
+  if(show) input.setAttribute("aria-invalid", "true");
+  else input.removeAttribute("aria-invalid");
+}
+
+qs("#btnShowNew").addEventListener("click", () => {
+  setNewCardOpen(true);
+  qs("#activeCard").style.display = "none";
+  qs("#npName").focus();
+});
+
+qs("#searchForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const candidates = findPatientCandidates({
+    name: qs("#searchName").value,
+    approxAge: qs("#searchAge").value,
+    sex: qs("#searchSex").value,
+    country: qs("#searchCountry").value
+  });
+  renderCandidates(qs("#candidates"), candidates, (patient) => openPatient(patient));
+});
+
+qs("#newForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const nameInput = qs("#npName");
+  const name = nameInput.value.trim();
+  if(!name){
+    showFieldError(nameInput, qs("#npNameErr"), true);
+    nameInput.focus();
+    return;
+  }
+  showFieldError(nameInput, qs("#npNameErr"), false);
+  const country = qs("#npCountry").value;
+  const patient = {
+    id: db_nextPatientId(country),
+    name, sex: qs("#npSex").value,
+    approxAge: Number(qs("#npAge").value) || 0,
+    country, allergies: [], visits: []
+  };
+  db_addPatient(patient);
+  setNewCardOpen(false);
+  nameInput.value = "";
+  openPatient(patient);
+  toast("Pass created for " + name);
+});
+
+function openPatient(patient){
+  activePatient = patient;
+  qs("#activeCard").style.display = "block";
+  qs("#activeName").textContent = patient.name;
+  qs("#activeId").textContent = patient.id;
+  qs("#activeMeta").textContent = `${patient.sex} · approx. age ${patient.approxAge} · ${missionForCode(patient.country).country}` +
+    (patient.allergies.length ? ` · allergies: ${patient.allergies.join(", ")}` : "");
+  renderPassCard(qs("#qrHolder"), patient);
+
+  const prior = priorVisits(patient);
+  const briefEl = qs("#priorBrief");
+  if(prior.length){
+    const last = prior[prior.length-1];
+    briefEl.innerHTML = `<div class="card" style="background:var(--teal-pale); border-color:var(--teal); margin-top:12px;">
+      <h3 style="color:var(--teal-dark);">Returning patient — prior visit on file</h3>
+      <p class="small">${esc(last.year)}: seen for "${esc(last.complaint)}" — ${esc(last.diagnosis || "no diagnosis recorded")}.
+      ${last.prescription.length ? "Prescribed: " + esc(last.prescription.join(", ")) + "." : ""}
+      This is a summary only; full history is visible to the physician.</p>
+    </div>`;
+  } else {
+    briefEl.innerHTML = "";
+  }
+
+  const lang = missionForCode(patient.country).language;
+  qs("#langLabel").textContent = "Language: " + lang;
+  qs("#micLabel").textContent = "Tap to speak";
+  qs("#transcript").textContent = "Tap the mic, or type below.";
+  qs("#complaintText").value = "";
+  showFieldError(qs("#complaintText"), qs("#complaintErr"), false);
+  qs("#categoryBadge").textContent = "—";
+  ["#vBp","#vTemp","#vWeight","#vHeight"].forEach(id => qs(id).value = "");
+
+  const micBtn = qs("#micBtn");
+  const newMic = micBtn.cloneNode(true);
+  micBtn.parentNode.replaceChild(newMic, micBtn);
+  attachSpeechToText(newMic, qs("#transcript"), {
+    lang: SPEECH_LANG_MAP[lang] || "en-US",
+    onInterim: (text) => { qs("#complaintText").value = text; updateCategory(); },
+    onFinal: (text) => { qs("#complaintText").value = text; updateCategory(); }
+  });
+
+  focusEl(qs("#activeName"));
+}
+
+qs("#complaintText").addEventListener("input", updateCategory);
+function updateCategory(){
+  const res = classifyComplaint(qs("#complaintText").value);
+  qs("#categoryBadge").textContent = res.label;
+}
+
+qs("#btnSendToDoctor").addEventListener("click", () => {
+  if(!activePatient){ toast("Find or register a patient first"); return; }
+  const complaintInput = qs("#complaintText");
+  const complaintText = complaintInput.value.trim();
+  if(!complaintText){
+    showFieldError(complaintInput, qs("#complaintErr"), true);
+    complaintInput.focus();
+    return;
+  }
+  showFieldError(complaintInput, qs("#complaintErr"), false);
+  const cat = classifyComplaint(complaintText);
+  const visit = {
+    year: new Date().getFullYear(),
+    date: new Date().toISOString().slice(0,10),
+    vitals: { bp:qs("#vBp").value, temp:qs("#vTemp").value, weight:qs("#vWeight").value, height:qs("#vHeight").value },
+    complaint: complaintText,
+    category: cat.key,
+    language: missionForCode(activePatient.country).language,
+    diagnosis: "", prescription: [], labOrdered: false, note: ""
+  };
+  db_addVisit(activePatient.id, visit);
+  db_moveToStation(activePatient.id, "physician");
+  toast(activePatient.name + " sent to physician queue");
+  qs("#activeCard").style.display = "none";
+  qs("#candidates").innerHTML = "";
+  activePatient = null;
+  focusEl(qs("#findHeading"));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mission dashboard — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Mission dashboard</span></div>
+  </div>
+  <div class="header-actions">
+    <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
+  </div>
+</header>
+
+<main class="wide" id="main" tabindex="-1">
+  <h1 class="visually-hidden">Mission dashboard</h1>
+
+  <section aria-labelledby="topHeading">
+    <h2 id="topHeading" class="visually-hidden">Totals</h2>
+    <ul class="grid-3 queue-list" id="topStats"></ul>
+  </section>
+
+  <div class="grid-2" style="margin-top:14px;">
+    <div class="card">
+      <h2>Visits by camp</h2>
+      <div id="byCountry"></div>
+    </div>
+    <div class="card">
+      <h2>Visits by category</h2>
+      <div id="byCategory"></div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-top:14px;">
+    <div class="card">
+      <h2>Visits by language</h2>
+      <p class="small muted">Every interaction tagged by language is a line of evidence for which locales need stronger voice and translation coverage next.</p>
+      <div id="byLanguage"></div>
+    </div>
+    <div class="card">
+      <h2>Continuity</h2>
+      <div class="grid-2" style="gap:10px; margin-top:4px;">
+        <div class="stat"><div class="num" id="returningNum">0</div><div class="label">returning patients, prior record found</div></div>
+        <div class="stat"><div class="num" id="newNum">0</div><div class="label">new patients registered</div></div>
+      </div>
+      <p class="small muted" style="margin-top:10px;">Every returning patient here is a clinician who started from a brief instead of from zero.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <h2>Pharmacy — stock and next-mission packing list</h2>
+    <h3 style="margin-top:8px;">Stock on hand</h3>
+    <div id="stockFull"></div>
+    <h3 style="margin-top:14px;">Pack more of next time</h3>
+    <div id="packing"></div>
+  </div>
+
+</main>
+<footer class="app-foot">MissionLink · Mission dashboard · auto-generated from today's records, nothing entered twice</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/reports.js"></script>
+<script>
+db_seedIfEmpty();
+const r = reportSummary();
+
+qs("#topStats").innerHTML = `
+  <li class="stat"><div class="num">${r.totalPatients}</div><div class="label">patients on file</div></li>
+  <li class="stat"><div class="num">${r.totalVisits}</div><div class="label">visits recorded</div></li>
+  <li class="stat"><div class="num">${r.dispensedTotal}</div><div class="label">items dispensed</div></li>
+`;
+
+// Bars are drawn for sighted users; each row is a list item whose text
+// ("Kenya: 3 visits") carries the full value for screen readers.
+function barList(el, dataObj, labelFn){
+  const entries = Object.entries(dataObj).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const max = Math.max(1, ...entries.map(e => e[1]));
+  el.innerHTML = entries.length ? `<ul class="queue-list">` + entries.map(([k,v]) => `
+    <li class="bar-row">
+      <div class="name">${esc(labelFn(k))}<span class="visually-hidden">:</span></div>
+      <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="width:${Math.round(v/max*100)}%;"></div></div>
+      <div class="val">${v}<span class="visually-hidden"> ${v === 1 ? "visit" : "visits"}</span></div>
+    </li>
+  `).join("") + `</ul>` : `<p class="small muted">No data yet.</p>`;
+}
+
+barList(qs("#byCountry"), r.byCountry, k => missionForCode(k) ? missionForCode(k).country : k);
+barList(qs("#byCategory"), r.byCategory, k => categoryLabel(k));
+barList(qs("#byLanguage"), r.byLanguage, k => k);
+
+qs("#returningNum").textContent = r.returningCount;
+qs("#newNum").textContent = r.newCount;
+
+qs("#stockFull").innerHTML = stockRowsHtml(db_getInventory());
+
+const pack = packingSuggestions();
+qs("#packing").innerHTML = pack.length
+  ? `<ul class="queue-list" style="display:flex; flex-wrap:wrap;">` + pack.map(p => `<li class="badge badge-rust" style="margin:0 6px 6px 0;">${esc(p.name)} — pack ${p.suggestion} more</li>`).join("") + `</ul>`
+  : `<p class="small muted">Nothing below par level right now.</p>`;
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patient — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Patient</span></div>
+  </div>
+  <div class="header-actions">
+    <span class="role-pill role-patient"><span class="dot" aria-hidden="true"></span>Patient</span>
+    <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <h1 class="visually-hidden">Patient</h1>
+  <section class="card" id="searchCard" aria-labelledby="findHeading">
+    <h2 id="findHeading">Find my pass</h2>
+    <p class="muted small" id="findHelp">Lost your card? A staff member can look you up by name instead — this screen is for finding your own pass with your ID or name.</p>
+    <form id="findForm" novalidate>
+      <div class="field">
+        <label for="pSearch">Your name or pass ID</label>
+        <input type="text" id="pSearch" autocomplete="off" placeholder="e.g. Amina Wanjiru or ML-KE-0001" aria-describedby="findHelp">
+      </div>
+      <button type="submit" class="btn btn-primary" id="btnFind">Find my pass</button>
+    </form>
+    <div id="pResults" style="margin-top:10px;" aria-live="polite"></div>
+  </section>
+
+  <section class="card" id="passCard" style="display:none;" aria-labelledby="passName">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+      <div>
+        <h2 id="passName" style="font-size:20px;"></h2>
+        <p class="muted" id="passMeta"></p>
+      </div>
+      <div class="qr-wrap">
+        <div id="qrHolder"></div>
+      </div>
+    </div>
+    <p class="small muted" style="margin-top:6px;">Keep this card. If you lose it, staff can find your record again with your name.</p>
+
+    <div id="statusBlock" style="margin-top:14px;"></div>
+
+    <h3 style="margin-top:16px;">Your visits</h3>
+    <div id="historyBlock"></div>
+
+    <button type="button" class="btn btn-secondary" id="btnBack" style="margin-top:12px;">Find a different pass</button>
+  </section>
+</main>
+<footer class="app-foot">MissionLink · Patient</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="js/qr.js"></script>
+<script>
+db_seedIfEmpty();
+
+qs("#findForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = qs("#pSearch");
+  const term = input.value.trim().toLowerCase();
+  const el = qs("#pResults");
+  if(!term){
+    el.innerHTML = `<p class="small" style="color:var(--danger);">Enter your name or pass ID.</p>`;
+    input.focus();
+    return;
+  }
+  const matches = db_getPatients().filter(p =>
+    p.id.toLowerCase() === term || p.name.toLowerCase().includes(term)
+  );
+  if(matches.length === 1){
+    el.innerHTML = "";
+    openPass(matches[0]);
+  } else if(matches.length > 1){
+    el.innerHTML = `<p class="small">${matches.length} passes match — choose yours:</p><ul class="queue-list">` + matches.map(p => `<li>
+      <button type="button" class="match-card" data-id="${esc(p.id)}">
+        <span class="match-photo"><img src="${avatarDataUri(p.name)}" alt=""></span>
+        <span class="match-info"><span class="match-name" style="display:block;">${esc(p.name)}</span><span class="match-meta" style="display:block;">${esc(p.id)}</span></span>
+      </button></li>`).join("") + `</ul>`;
+    qsa("#pResults .match-card").forEach(c => c.addEventListener("click", () => openPass(db_getPatient(c.dataset.id))));
+  } else {
+    el.innerHTML = `<p class="muted small">No pass found. Ask a staff member at registration for help.</p>`;
+  }
+});
+
+qs("#btnBack").addEventListener("click", () => {
+  qs("#passCard").style.display = "none";
+  qs("#searchCard").style.display = "block";
+  qs("#pResults").innerHTML = "";
+  qs("#pSearch").focus();
+});
+
+function openPass(p){
+  qs("#searchCard").style.display = "none";
+  qs("#passCard").style.display = "block";
+  qs("#passName").textContent = p.name;
+  qs("#passMeta").textContent = `${p.id} · ${missionForCode(p.country).camp}, ${missionForCode(p.country).country}`;
+  renderPassCard(qs("#qrHolder"), p);
+
+  const entry = db_getQueue().find(e => e.patientId === p.id);
+  const statusEl = qs("#statusBlock");
+  if(entry){
+    const STATION_LABEL = { triage:"Triage — vitals and your symptoms", physician:"Seeing the physician next", pharmacy:"Pharmacy — your medication" };
+    statusEl.innerHTML = `<div class="card" style="background:var(--teal-pale); border-color:var(--teal);">
+      <h3 style="color:var(--teal-dark);">Today</h3>
+      <p class="small">${esc(STATION_LABEL[entry.station] || entry.station)}</p>
+    </div>`;
+  } else {
+    statusEl.innerHTML = "";
+  }
+
+  const hist = qs("#historyBlock");
+  if(p.visits.length === 0){
+    hist.innerHTML = `<p class="small muted">No visits recorded yet.</p>`;
+  } else {
+    hist.innerHTML = `<ol class="queue-list">` + p.visits.slice().reverse().map(v => `
+      <li class="tl-item">
+        <div class="tl-date">${esc(v.year)}</div>
+        <div class="small">${esc(v.diagnosis ? v.diagnosis : "Seen for: " + v.complaint)}</div>
+      </li>
+    `).join("") + `</ol>`;
+  }
+  focusEl(qs("#passName"));
+}
+</script>
+</body>
+</html>
