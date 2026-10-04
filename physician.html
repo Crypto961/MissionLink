@@ -43,7 +43,8 @@
         <p id="pComplaint" class="small"></p>
         <p id="pComplaintEn" class="small" hidden></p>
         <div id="pDanger" class="small" hidden style="border-left:4px solid var(--danger); background:var(--danger-pale); padding:8px 10px; border-radius:6px; margin:6px 0;"></div>
-        <p class="small muted" id="pVitals"></p>
+        <p class="small muted" id="pVitals" style="margin-bottom:6px;"></p>
+        <div id="unitDisplay" style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;"></div>
       </div>
 
       <div id="historySection"></div>
@@ -87,6 +88,7 @@
 
 <script src="js/data.js"></script>
 <script src="js/db.js"></script>
+<script src="js/units.js"></script>
 <script src="js/speech.js"></script>
 <script src="js/claude.js"></script>
 <script src="js/inventory.js"></script>
@@ -146,7 +148,11 @@ function openChart(p){
   qs("#pComplaintEn").textContent = v.complaintEnglish ? `In English (Claude summary): ${v.complaintEnglish}` : "";
   qs("#pDanger").hidden = !(v.dangerSigns && v.dangerSigns.length);
   qs("#pDanger").textContent = v.dangerSigns && v.dangerSigns.length ? `Danger signs mentioned at triage: ${v.dangerSigns.join(", ")}` : "";
-  qs("#pVitals").textContent = `BP ${v.vitals.bp || "—"} · Temp ${v.vitals.temp || "—"}°C · Weight ${v.vitals.weight || "—"}kg · Height ${v.vitals.height || "—"}cm`;
+  qs("#pVitals").textContent = formatVitals(v.vitals);
+  attachDisplayUnitSwitch(qs("#unitDisplay"), () => {
+    qs("#pVitals").textContent = formatVitals(latestVisit(current).vitals);
+    qsa("#historySection [data-vitals]").forEach(el => el.textContent = formatVitals(JSON.parse(el.dataset.vitals)));
+  });
 
   const prior = priorVisits(p);
   const hist = qs("#historySection");
@@ -154,6 +160,7 @@ function openChart(p){
     hist.innerHTML = `<h3 style="margin-top:14px;">Visit history</h3><ol class="queue-list">` + prior.slice().reverse().map(pv => `
       <li class="tl-item">
         <div class="tl-date">${esc(pv.year)}</div>
+        ${pv.vitals ? `<div class="small muted" data-vitals="${esc(JSON.stringify(pv.vitals))}">${esc(formatVitals(pv.vitals))}</div>` : ""}
         <div class="small">"${esc(pv.complaint)}" — ${esc(pv.diagnosis || "no diagnosis recorded")}.
         ${pv.prescription.length ? "Prescribed: " + esc(pv.prescription.map(sku => (INVENTORY_SEED.find(i=>i.sku===sku)||{}).name || sku).join(", ")) + "." : "No medication given."}</div>
       </li>

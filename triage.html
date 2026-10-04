@@ -92,10 +92,11 @@
       pulse oximeters and thermometers as the device takes the reading. Typed here for the demo.</p>
     <div class="grid-3">
       <div class="field"><label for="vBp">Blood pressure (mmHg)</label><input type="text" id="vBp" placeholder="120/80" autocomplete="off"></div>
-      <div class="field"><label for="vTemp">Temperature (°C)</label><input type="text" id="vTemp" inputmode="decimal" placeholder="37.0" autocomplete="off"></div>
-      <div class="field"><label for="vWeight">Weight (kg)</label><input type="text" id="vWeight" inputmode="decimal" autocomplete="off"></div>
+      <div class="field"><label for="vTemp">Temperature</label><input type="text" id="vTemp" inputmode="decimal" autocomplete="off"></div>
+      <div class="field"><label for="vWeight">Weight</label><input type="text" id="vWeight" inputmode="decimal" autocomplete="off"></div>
     </div>
-    <div class="field" style="max-width:200px;"><label for="vHeight">Height (cm)</label><input type="text" id="vHeight" inputmode="decimal" autocomplete="off"></div>
+    <div class="field" style="max-width:260px;"><label for="vHeight">Height</label><input type="text" id="vHeight" inputmode="decimal" autocomplete="off"></div>
+    <p class="small muted">Type in either unit — tap °C/°F, kg/lb or cm/in to switch. Records are saved in metric and shown in both everywhere.</p>
 
     <h3 style="margin-top:14px;" id="complaintHeading">3. Chief complaint</h3>
     <div class="btn-row" style="margin-bottom:8px; align-items:center;">
@@ -130,6 +131,7 @@
 <script src="js/data.js"></script>
 <script src="js/db.js"></script>
 <script src="js/lookup.js"></script>
+<script src="js/units.js"></script>
 <script src="js/speech.js"></script>
 <script src="js/claude.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -138,6 +140,11 @@
 db_seedIfEmpty();
 
 let activePatient = null;
+const unitFields = {
+  temp: attachUnitField(qs("#vTemp"), "temp"),
+  weight: attachUnitField(qs("#vWeight"), "weight"),
+  height: attachUnitField(qs("#vHeight"), "height")
+};
 let activeLocale = "en-US";
 let aiAnalysis = null;      // Claude's last result for the current complaint text
 let categorySource = "keywords";
@@ -291,6 +298,7 @@ function openPatient(patient){
       <p class="small">${esc(last.year)}: seen for "${esc(last.complaint)}" — ${esc(last.diagnosis || "no diagnosis recorded")}.
       ${last.prescription.length ? "Prescribed: " + esc(last.prescription.join(", ")) + "." : ""}
       This is a summary only; full history is visible to the physician.</p>
+      ${last.vitals ? `<p class="small muted" style="margin:0;">Last vitals: ${esc(formatVitals(last.vitals))}</p>` : ""}
     </div>`;
   } else {
     briefEl.innerHTML = "";
@@ -307,7 +315,8 @@ function openPatient(patient){
   qs("#markUrgent").checked = false;
   clearAi();
   updateAiHint();
-  ["#vBp","#vTemp","#vWeight","#vHeight"].forEach(id => qs(id).value = "");
+  qs("#vBp").value = "";
+  Object.values(unitFields).forEach(f => f.reset());
 
   const micBtn = qs("#micBtn");
   const newMic = micBtn.cloneNode(true);
@@ -352,7 +361,7 @@ qs("#btnSendToDoctor").addEventListener("click", () => {
   const visit = {
     year: new Date().getFullYear(),
     date: new Date().toISOString().slice(0,10),
-    vitals: { bp:qs("#vBp").value, temp:qs("#vTemp").value, weight:qs("#vWeight").value, height:qs("#vHeight").value },
+    vitals: { bp:qs("#vBp").value.trim(), temp:unitFields.temp.metricValue(), weight:unitFields.weight.metricValue(), height:unitFields.height.metricValue() },
     complaint: complaintText,
     category: qs("#categorySelect").value,
     categorySource,
