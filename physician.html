@@ -11,7 +11,7 @@
 <header class="app-header">
   <div class="brand">
     <div class="brand-mark" aria-hidden="true">ML</div>
-    <div class="brand-text"><strong>MissionLink</strong><span>Physician</span></div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Physician · <span class="mission-line" data-active-mission></span></span></div>
   </div>
   <div class="header-actions">
     <span class="role-pill role-physician"><span class="dot" aria-hidden="true"></span>Physician</span>
@@ -75,6 +75,10 @@
           <div id="rxOptions" class="btn-row"></div>
         </fieldset>
 
+        <div class="field" style="max-width:360px;">
+          <label for="seenBy">Seen by</label>
+          <select id="seenBy"></select>
+        </div>
         <button type="submit" class="btn btn-primary btn-block" id="btnComplete" style="margin-top:12px;">Complete visit</button>
       </form>
     </section>
@@ -95,6 +99,8 @@
 <script>
 db_seedIfEmpty();
 let current = null;
+setupOnDutyPicker(qs("#seenBy"), "physician", "missionlink_seen_by");
+const inventoryName = sku => (db_getInventory().find(i => i.sku === sku) || INVENTORY_SEED.find(i => i.sku === sku) || {}).name || sku;
 
 function renderQueue(){
   const entries = db_getQueue("physician");
@@ -148,9 +154,10 @@ function openChart(p){
   qs("#pComplaintEn").textContent = v.complaintEnglish ? `In English (Claude summary): ${v.complaintEnglish}` : "";
   qs("#pDanger").hidden = !(v.dangerSigns && v.dangerSigns.length);
   qs("#pDanger").textContent = v.dangerSigns && v.dangerSigns.length ? `Danger signs mentioned at triage: ${v.dangerSigns.join(", ")}` : "";
-  qs("#pVitals").textContent = formatVitals(v.vitals);
+  qs("#pVitals").textContent = formatVitals(v.vitals) + (v.triagedBy ? ` · Triaged by ${v.triagedBy}` : "");
   attachDisplayUnitSwitch(qs("#unitDisplay"), () => {
-    qs("#pVitals").textContent = formatVitals(latestVisit(current).vitals);
+    const lv = latestVisit(current);
+    qs("#pVitals").textContent = formatVitals(lv.vitals) + (lv.triagedBy ? ` · Triaged by ${lv.triagedBy}` : "");
     qsa("#historySection [data-vitals]").forEach(el => el.textContent = formatVitals(JSON.parse(el.dataset.vitals)));
   });
 
@@ -159,10 +166,10 @@ function openChart(p){
   if(prior.length){
     hist.innerHTML = `<h3 style="margin-top:14px;">Visit history</h3><ol class="queue-list">` + prior.slice().reverse().map(pv => `
       <li class="tl-item">
-        <div class="tl-date">${esc(pv.year)}</div>
+        <div class="tl-date">${esc(pv.date || pv.year)}${pv.seenBy ? ` · ${esc(pv.seenBy)}` : ""}</div>
         ${pv.vitals ? `<div class="small muted" data-vitals="${esc(JSON.stringify(pv.vitals))}">${esc(formatVitals(pv.vitals))}</div>` : ""}
         <div class="small">"${esc(pv.complaint)}" — ${esc(pv.diagnosis || "no diagnosis recorded")}.
-        ${pv.prescription.length ? "Prescribed: " + esc(pv.prescription.map(sku => (INVENTORY_SEED.find(i=>i.sku===sku)||{}).name || sku).join(", ")) + "." : "No medication given."}</div>
+        ${pv.prescription.length ? "Prescribed: " + esc(pv.prescription.map(sku => inventoryName(sku)).join(", ")) + "." : "No medication given."}</div>
       </li>
     `).join("") + `</ol>`;
   } else {
@@ -245,6 +252,7 @@ qs("#ordersForm").addEventListener("submit", (e) => {
   if(v.labOrdered) v.labResult = qs("#labResult").value.trim();
   const chosenSkus = qsa('#rxOptions [aria-pressed="true"]').map(b => b.dataset.sku);
   v.prescription = chosenSkus;
+  if(qs("#seenBy").value) v.seenBy = staffName(qs("#seenBy").value);
   // the visit object was mutated in place above; persist the whole patient record back to storage
   db_savePatient(current);
 

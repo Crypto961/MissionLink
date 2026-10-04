@@ -2,12 +2,56 @@
    All patients, names and vitals below are SYNTHETIC, generated for this demo.
    No real patient data of any kind should ever be committed to this repo. */
 
+/* Mission camps. One record per camp run; `code` is the country code that
+   patient records and pass IDs use, so a patient seen in Kenya in 2025 and
+   2026 is one record across both missions. These are only the demo's
+   starting point: the Admin page creates, edits and removes missions. */
 const MISSIONS = [
-  { code:"KE", country:"Kenya",      camp:"Turkana Camp",     language:"Swahili",          years:[2025, 2026] },
-  { code:"MR", country:"Mauritania", camp:"Nouakchott Camp",  language:"Hassaniya Arabic", years:[2025, 2026] },
-  { code:"PE", country:"Peru",       camp:"Cusco Highlands",  language:"Quechua",          years:[2025, 2026] },
-  { code:"LB", country:"Lebanon",    camp:"Bekaa Valley",     language:"Lebanese Arabic",  years:[2026] }
+  { id:"KE-2025", code:"KE", country:"Kenya",      camp:"Turkana Camp",    location:"Lodwar, Turkana County",       language:"Swahili",          startDate:"2025-11-10", endDate:"2025-11-16", dailyHours:"08:00–17:00", notes:"" },
+  { id:"MR-2025", code:"MR", country:"Mauritania", camp:"Nouakchott Camp", location:"Sebkha district, Nouakchott",  language:"Hassaniya Arabic", startDate:"2025-11-18", endDate:"2025-11-23", dailyHours:"08:00–16:00", notes:"" },
+  { id:"PE-2025", code:"PE", country:"Peru",       camp:"Cusco Highlands", location:"Ccatca, Quispicanchi",         language:"Quechua",          startDate:"2025-09-12", endDate:"2025-09-18", dailyHours:"07:30–16:30", notes:"" },
+  { id:"KE-2026", code:"KE", country:"Kenya",      camp:"Turkana Camp",    location:"Lodwar, Turkana County",       language:"Swahili",          startDate:"2026-10-01", endDate:"2026-10-10", dailyHours:"08:00–17:00", notes:"Second year at this site. Interpreters for Turkana available on site." },
+  { id:"MR-2026", code:"MR", country:"Mauritania", camp:"Nouakchott Camp", location:"Sebkha district, Nouakchott",  language:"Hassaniya Arabic", startDate:"2026-10-01", endDate:"2026-10-08", dailyHours:"08:00–16:00", notes:"" },
+  { id:"PE-2026", code:"PE", country:"Peru",       camp:"Cusco Highlands", location:"Ccatca, Quispicanchi",         language:"Quechua",          startDate:"2026-10-01", endDate:"2026-10-09", dailyHours:"07:30–16:30", notes:"High altitude (3,700 m): stock altitude-sickness supplies." },
+  { id:"LB-2026", code:"LB", country:"Lebanon",    camp:"Bekaa Valley",    location:"Bar Elias, Bekaa",             language:"Lebanese Arabic",  startDate:"2026-10-02", endDate:"2026-10-12", dailyHours:"09:00–17:00", notes:"First mission at this site." }
 ];
+
+/* Languages the speech recogniser and Claude are set up for. */
+const MISSION_LANGUAGES = ["Swahili", "Hassaniya Arabic", "Lebanese Arabic", "Quechua", "Spanish", "French", "English", "Arabic", "Portuguese"];
+
+const STAFF_ROLES = [
+  { key:"physician",  label:"Physician" },
+  { key:"nurse",      label:"Nurse" },
+  { key:"pharmacist", label:"Pharmacist" },
+  { key:"runner",     label:"Runner" },
+  { key:"interpreter",label:"Interpreter" },
+  { key:"volunteer",  label:"General volunteer" },
+  { key:"lead",       label:"Mission lead" }
+];
+
+/* Synthetic volunteer roster for the demo. */
+const STAFF_SEED = [
+  { id:"S-001", name:"Dr. Leila Haddad",    role:"physician",  specialty:"Family medicine",         languages:"Arabic, French, English", homeCountry:"Lebanon",  missionIds:["LB-2026","MR-2026"] },
+  { id:"S-002", name:"Dr. Samuel Otieno",   role:"physician",  specialty:"Pediatrics",              languages:"Swahili, English",        homeCountry:"Kenya",    missionIds:["KE-2025","KE-2026"] },
+  { id:"S-003", name:"Dr. María Condori",   role:"physician",  specialty:"Internal medicine",       languages:"Spanish, Quechua",        homeCountry:"Peru",     missionIds:["PE-2025","PE-2026"] },
+  { id:"S-004", name:"Dr. James Whitfield", role:"physician",  specialty:"Dermatology",             languages:"English",                 homeCountry:"United States", missionIds:["KE-2026","PE-2026"] },
+  { id:"S-005", name:"Dr. Aïcha Ba",        role:"physician",  specialty:"Obstetrics & gynecology", languages:"French, Hassaniya Arabic", homeCountry:"Mauritania", missionIds:["MR-2025","MR-2026"] },
+  { id:"S-006", name:"Grace Wanjiku, RN",   role:"nurse",      specialty:"Triage",                  languages:"Swahili, English",        homeCountry:"Kenya",    missionIds:["KE-2026"] },
+  { id:"S-007", name:"Nour Khoury, RN",     role:"nurse",      specialty:"Pediatric nursing",       languages:"Arabic, English",         homeCountry:"Lebanon",  missionIds:["LB-2026"] },
+  { id:"S-008", name:"Rosa Huamán, RN",     role:"nurse",      specialty:"Midwifery",               languages:"Spanish, Quechua",        homeCountry:"Peru",     missionIds:["PE-2026"] },
+  { id:"S-009", name:"Emily Carter, RN",    role:"nurse",      specialty:"Emergency nursing",       languages:"English",                 homeCountry:"Canada",   missionIds:["KE-2026","MR-2026"] },
+  { id:"S-010", name:"Karim Mansour",       role:"pharmacist", specialty:"Clinical pharmacy",       languages:"Arabic, French",          homeCountry:"Lebanon",  missionIds:["LB-2026","MR-2026"] },
+  { id:"S-011", name:"Peter Mwangi",        role:"pharmacist", specialty:"Community pharmacy",      languages:"Swahili, English",        homeCountry:"Kenya",    missionIds:["KE-2026"] },
+  { id:"S-012", name:"Sidi Mohamed Ould Ahmed", role:"interpreter", specialty:"Hassaniya ↔ French",  languages:"Hassaniya Arabic, French", homeCountry:"Mauritania", missionIds:["MR-2026"] },
+  { id:"S-013", name:"Lucas Mamani",        role:"runner",     specialty:"",                        languages:"Spanish, Quechua",        homeCountry:"Peru",     missionIds:["PE-2026"] },
+  { id:"S-014", name:"Hannah Schmidt",      role:"lead",       specialty:"Operations",              languages:"German, English, French", homeCountry:"Germany",  missionIds:["KE-2026","MR-2026","PE-2026","LB-2026"] }
+];
+
+const SETTINGS_SEED = {
+  organization: "TotalCare",
+  activeMissionId: "KE-2026",
+  defaultUnits: "metric"
+};
 
 const COMPLAINT_CATEGORIES = [
   { key:"respiratory",   label:"Respiratory",       keywords:["cough","breath","chest","wheeze","asthma"] },
