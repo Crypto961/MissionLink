@@ -123,6 +123,7 @@ Your job is routing support, not diagnosis:
 - Pick the routing category that best fits. Use "other" when unsure.
 - List danger signs only when the patient actually mentioned them (for example difficulty breathing, chest pain, heavy bleeding, convulsions, unconsciousness, severe dehydration, high fever in an infant, pregnancy with bleeding or severe pain). Don't infer them.
 - If the transcript is too garbled to understand, say so in the English summary and use "other".
+- Volunteers use both metric and US units. Whenever the patient states a temperature, weight or height, keep their number and unit and add the other system in brackets in the English summary, e.g. "fever of 102 °F (38.9 °C)", "weighs 20 lb (9.1 kg)".
 
 Routing categories:
 ${COMPLAINT_CATEGORIES.map(c => `- ${c.key}: ${c.label}`).join("\n")}`;
@@ -156,6 +157,7 @@ async function claudeCleanNote(transcript){
     system: `You tidy physicians' dictated clinical notes captured by speech recognition.
 Fix punctuation, capitalisation, obvious recognition errors and medical spelling (drug names, doses, units). Keep the physician's wording, order and meaning.
 Never add findings, diagnoses, doses or advice that weren't dictated. If a word is unclear, keep it and mark it [unclear].
+The care team mixes metric and US units: after every temperature, body weight or height, add the other system in brackets — e.g. "temp 101.3 °F (38.5 °C)", "weight 44 lb (20 kg)". Keep the dictated value first and unchanged. Don't convert drug doses.
 Reply with the tidied note only.`,
     messages: [{ role: "user", content: `<dictation>\n${transcript}\n</dictation>` }]
   });

@@ -54,6 +54,7 @@ missionlink/
   js/db.js               storage layer — see "Demo vs. production" below
   js/lookup.js            non-biometric "find my record" matching (name + age + sex + camp)
   js/speech.js            speech-to-text wiring + the keyword chief-complaint classifier
+  js/units.js             metric/US conversion for vitals (°C/°F, kg/lb, cm/in)
   js/claude.js            Claude API layer: complaint summary/translation/sorting, note tidying, settings dialog
   js/qr.js                QR pass rendering
   js/inventory.js          dispensing + low-stock + packing-list logic
@@ -134,6 +135,22 @@ own review, not a feature flag to flip on.
 - Accessibility has had an automated and code-level pass (see "Accessibility" below), but not yet a
   session with real screen-reader users or a sunlight-contrast check on the actual field tablets —
   both are worth doing before any real pilot.
+
+## Metric and US units
+
+Volunteers come from countries that measure differently, so every vital works in both systems:
+
+- **Triage:** temperature, weight and height each have a °C/°F, kg/lb or cm/in switch. As you type,
+  the converted value shows underneath ("= 101.3 °F"). Switching units converts what's already in
+  the field, and commas work as decimal marks. A temperature in the other system's normal range
+  (e.g. 100 with °C selected) gets a "this looks like °F — check the unit" warning.
+- **Everywhere vitals appear** (the triage prior-visit brief, the physician's chart and visit
+  history), they're shown in both systems, e.g. `38.5 °C (101.3 °F)`, `160 cm (63.0 in, 5 ft 3 in)`.
+  The physician's chart has a "units shown first" switch.
+- **Claude** adds the other unit in brackets whenever a patient mentions a temperature or weight,
+  or a physician dictates one (drug doses are never converted).
+- Each person's preferred unit (per measurement) is remembered in their browser. Records are always
+  **stored in metric**, so data, reports and any future server stay in one unit.
 
 ## Claude API setup
 
