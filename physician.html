@@ -15,6 +15,7 @@
   </div>
   <div class="header-actions">
     <span class="role-pill role-physician"><span class="dot" aria-hidden="true"></span>Physician</span>
+    <button type="button" class="exit-link" data-claude-settings>Claude AI</button>
     <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
   </div>
 </header>
@@ -40,6 +41,8 @@
       <div class="card" style="background:var(--paper); margin-top:12px;">
         <h3>Current complaint</h3>
         <p id="pComplaint" class="small"></p>
+        <p id="pComplaintEn" class="small" hidden></p>
+        <div id="pDanger" class="small" hidden style="border-left:4px solid var(--danger); background:var(--danger-pale); padding:8px 10px; border-radius:6px; margin:6px 0;"></div>
         <p class="small muted" id="pVitals"></p>
       </div>
 
@@ -49,7 +52,9 @@
         <h3 style="margin-top:16px;">Assessment &amp; orders</h3>
         <div class="btn-row" style="margin-bottom:8px;">
           <button type="button" class="mic-btn" id="micBtn"><span class="mic-dot" aria-hidden="true"></span><span id="micLabel" data-mic-label>Dictate note</span></button>
+          <button type="button" class="btn btn-secondary" id="btnTidy" hidden>Tidy note with Claude</button>
         </div>
+        <p class="small muted" id="tidyStatus" aria-live="polite" style="margin:0 0 6px;"></p>
         <div class="transcript-box" id="transcript" aria-hidden="true">Tap the mic, or type below.</div>
         <div class="field" style="margin-top:8px;">
           <label for="diagText">Diagnosis / notes (your own clinical judgment — nothing here is AI-generated)</label>
@@ -83,6 +88,7 @@
 <script src="js/data.js"></script>
 <script src="js/db.js"></script>
 <script src="js/speech.js"></script>
+<script src="js/claude.js"></script>
 <script src="js/inventory.js"></script>
 <script>
 db_seedIfEmpty();
@@ -136,6 +142,10 @@ function openChart(p){
     (p.allergies.length ? ` · allergies: ${p.allergies.join(", ")}` : " · no known allergies");
   qs("#pCategory").textContent = categoryLabel(v.category);
   qs("#pComplaint").textContent = `"${v.complaint}"`;
+  qs("#pComplaintEn").hidden = !v.complaintEnglish;
+  qs("#pComplaintEn").textContent = v.complaintEnglish ? `In English (Claude summary): ${v.complaintEnglish}` : "";
+  qs("#pDanger").hidden = !(v.dangerSigns && v.dangerSigns.length);
+  qs("#pDanger").textContent = v.dangerSigns && v.dangerSigns.length ? `Danger signs mentioned at triage: ${v.dangerSigns.join(", ")}` : "";
   qs("#pVitals").textContent = `BP ${v.vitals.bp || "—"} · Temp ${v.vitals.temp || "—"}°C · Weight ${v.vitals.weight || "—"}kg · Height ${v.vitals.height || "—"}cm`;
 
   const prior = priorVisits(p);
@@ -153,6 +163,8 @@ function openChart(p){
   }
 
   qs("#diagText").value = "";
+  qs("#tidyStatus").textContent = "";
+  qs("#btnTidy").hidden = !claudeConfigured();
   qs("#transcript").textContent = "Tap the mic, or type below.";
   qs("#labOrder").checked = false;
   qs("#labOrder").setAttribute("aria-expanded", "false");
@@ -189,6 +201,28 @@ function openChart(p){
   renderQueue();
   focusEl(qs("#pName"));
 }
+
+document.addEventListener("claude-settings-changed", () => { qs("#btnTidy").hidden = !claudeConfigured(); });
+
+qs("#btnTidy").addEventListener("click", async () => {
+  const text = qs("#diagText").value.trim();
+  const status = qs("#tidyStatus");
+  if(!text){ status.textContent = "Dictate or type a note first."; qs("#diagText").focus(); return; }
+  const btn = qs("#btnTidy");
+  btn.disabled = true;
+  status.textContent = "Claude is tidying the note…";
+  try {
+    const tidy = await claudeCleanNote(text);
+    if(qs("#diagText").value.trim() !== text){ status.textContent = "The note changed while Claude was working — tap again to tidy the new text."; return; }
+    qs("#diagText").value = tidy;
+    status.textContent = "Note tidied by Claude — read it through before completing the visit.";
+    qs("#diagText").focus();
+  } catch(err){
+    status.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 qs("#labOrder").addEventListener("change", (e) => {
   qs("#labResultField").style.display = e.target.checked ? "block" : "none";

@@ -93,6 +93,12 @@ a{color:var(--teal-dark);}
 .exit-link{display:inline-flex; align-items:center; min-height:40px; font-size:13px; color:var(--ink-soft); text-decoration:none; border:1px solid var(--line-strong); padding:6px 12px; border-radius:8px;}
 .header-actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;}
 .header-actions nav{display:contents;}
+button.exit-link{background:var(--surface); cursor:pointer; font-family:inherit;}
+.ai-panel{margin-top:10px; padding:12px 14px; border-radius:11px; border:1px solid var(--slate); background:var(--slate-pale);}
+.ai-panel h4{font-size:13px; margin:0 0 6px; color:var(--slate-dark);}
+.ai-panel .danger{border-left:4px solid var(--danger); background:var(--danger-pale); padding:8px 10px; border-radius:6px; margin:8px 0;}
+dialog.card{max-width:520px; width:calc(100vw - 32px); color:var(--ink);}
+dialog::backdrop{background:rgba(28,35,33,0.45);}
 .exit-link:hover{border-color:var(--line-strong);}
 
 main{max-width:980px; margin:0 auto; padding:20px 20px 60px;}

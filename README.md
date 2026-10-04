@@ -53,7 +53,8 @@ missionlink/
   js/data.js             synthetic seed data (patients, inventory, categories, languages)
   js/db.js               storage layer — see "Demo vs. production" below
   js/lookup.js            non-biometric "find my record" matching (name + age + sex + camp)
-  js/speech.js            speech-to-text wiring + the chief-complaint classifier
+  js/speech.js            speech-to-text wiring + the keyword chief-complaint classifier
+  js/claude.js            Claude API layer: complaint summary/translation/sorting, note tidying, settings dialog
   js/qr.js                QR pass rendering
   js/inventory.js          dispensing + low-stock + packing-list logic
   js/reports.js            dashboard aggregation
@@ -66,10 +67,18 @@ refresh.
 
 ## What's AI, named plainly
 
+- **Claude (Anthropic's Claude API)** — at triage, Claude reads the spoken complaint and returns a
+  cleaned transcript in the patient's language, a plain-English summary for the physician, a routing
+  category, any danger signs the patient actually mentioned, and one follow-up question for the
+  nurse. At the physician's station it tidies a dictated note (punctuation, drug names, doses)
+  without adding anything. It never diagnoses, and a person reviews everything before it's saved:
+  the nurse can change the category, and marking a patient urgent is always the nurse's call.
+  See "Claude API setup" below.
 - **Speech recognition** — chief complaint (triage) and clinical notes (physician), by voice, in
-  the language set for that camp.
-- **Chief-complaint classifier** (`speech.js: classifyComplaint`) — a small, auditable keyword
-  matcher that sorts a complaint into a routing category. It never outputs a diagnosis, and its
+  the language set for that camp. This is the step that turns audio into text; the Claude API
+  works with text, images and PDFs, not audio, so Claude takes over once there's a transcript.
+- **Keyword fallback classifier** (`speech.js: classifyComplaint`) — a small, auditable keyword
+  matcher that sorts a complaint into a routing category while Claude is off or unreachable. It never outputs a diagnosis, and its
   entire rule set is the `COMPLAINT_CATEGORIES` table in `data.js` — nothing hidden in a model file.
 - **Prior-visit summarization** — when a returning patient is found, their last visit is condensed
   into a short brief for triage and a full timeline for the physician.
@@ -86,7 +95,8 @@ Vitals capture is sensor hardware, not AI — see below.
 | Browser `SpeechRecognition` API | An on-device model (e.g. a quantized Whisper or MMS build) running fully offline | The browser API typically round-trips audio to a vendor's server, which doesn't meet the brief's offline bar. Say this plainly if asked — it's intentional, not hidden |
 | QR codes (fully real, scannable) | QR + NFC | NFC needs real hardware and a secure-context Web NFC API with very limited browser support; it's represented in the UI copy ("tap your card") rather than faked |
 | Manually typed vitals | Bluetooth-paired BP cuff, pulse oximeter, BLE thermometer writing straight into the record | No real hardware to pair with in a demo; this is IoT integration, not AI, and is a comparatively simple addition later |
-| Keyword-based complaint classifier | A trained, still-auditable small classifier, ideally fine-tuned on real (de-identified) camp transcripts | Needs real training data this demo doesn't have access to |
+| Claude API key typed into the browser | A small proxy on the camp server (or a hosted function) that holds the key and forwards requests, with store-and-forward when offline | A static demo has no server to hide a key on |
+| Keyword fallback classifier when Claude is off | Claude whenever a connection is available; the keyword rules (or a small on-device classifier) as the offline fallback | Keeps triage working with no internet |
 
 ## Why there's no facial recognition
 
@@ -124,6 +134,33 @@ own review, not a feature flag to flip on.
 - Accessibility has had an automated and code-level pass (see "Accessibility" below), but not yet a
   session with real screen-reader users or a sunlight-contrast check on the actual field tablets —
   both are worth doing before any real pilot.
+
+## Claude API setup
+
+Claude features are off until you turn them on, and the app works without them (keyword sorting,
+no summaries).
+
+**For a demo:** open Triage or Physician, select **Claude AI** in the header, paste an Anthropic API
+key and save. The key is stored in that browser's `localStorage` only — it isn't committed or sent
+anywhere except the Claude API — but anyone using that browser could read it, so use a key with a
+low spend limit and select **Clear key** afterwards.
+
+**For a real deployment:** don't put keys in browsers. Run a small proxy that adds the key
+server-side, and put its URL in the **Proxy URL** field (leave the key empty). It must forward
+`POST /v1/messages` to `https://api.anthropic.com/v1/messages` with your key as `x-api-key`, pass
+the `anthropic-version` and `anthropic-beta` headers through, and answer CORS preflight requests
+for the site's origin. A Cloudflare Worker or any small server that does that is enough.
+
+Details: the SDK (`@anthropic-ai/sdk`, pinned in `js/claude.js`) is loaded from jsDelivr on first
+use, the model is `claude-opus-5-5` at low effort, triage results use structured JSON output so the
+category is always one of the app's own categories, and refusal fallback is enabled so a safety
+decline is retried on Anthropic's recommended model instead of failing.
+
+**Speech troubleshooting:** speech capture needs Chrome or Edge over `https` (GitHub Pages is fine)
+or `localhost`, with microphone permission allowed, and an internet connection (the browser's
+recogniser runs on the vendor's servers). If a camp language isn't available in that browser, the
+app says so and listens in English instead — Claude then makes the best of the English transcript.
+Firefox has no speech recognition; type instead.
 
 ## Accessibility
 
