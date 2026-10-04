@@ -260,7 +260,7 @@ function initials(name){
    Generated as an inline SVG data URI so the demo never ships or implies
    real patient photographs. Swap for an actual captured photo in production. */
 function avatarDataUri(name){
-  const palette = ["#2F6F5E","#B8862E","#C4603A","#4A5A68","#6E5A9E"];
+  const palette = ["#1B6F92","#B8862E","#C4603A","#4A5A68","#6E5A9E"];
   let hash = 0;
   for(let i=0;i<name.length;i++) hash = (hash*31 + name.charCodeAt(i)) % 997;
   const color = palette[hash % palette.length];
