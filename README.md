@@ -1,3 +1,5 @@
+<p align="center"><img src="img/logo.png" alt="MissionLink — On a mission to heal" width="300"></p>
+
 # MissionLink
 **On a mission to heal.**
 
