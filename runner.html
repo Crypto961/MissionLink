@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runner — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Runner</span></div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span class="role-pill role-runner"><span class="dot"></span>Runner</span>
+    <a class="exit-link" href="index.html">Switch role</a>
+  </div>
+</header>
+
+<main>
+  <div class="grid-3" id="stationStats"></div>
+
+  <div class="card" style="margin-top:14px;">
+    <h2>Find where a patient should go</h2>
+    <div class="field">
+      <input type="search" id="runnerSearch" placeholder="Type a patient's name…">
+    </div>
+    <div id="runnerResults"></div>
+  </div>
+
+  <div class="card">
+    <h2>Everyone currently in the system</h2>
+    <p class="small muted">Longest-waiting first — a good order to help move people along.</p>
+    <div id="fullQueue"></div>
+  </div>
+</main>
+<footer class="app-foot">MissionLink · Runner</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script>
+db_seedIfEmpty();
+
+const STATION_LABEL = { triage:"Triage", physician:"Physician", pharmacy:"Pharmacy" };
+const STATION_DIRECTION = {
+  triage:"Guide them to the triage tent — vitals and intake.",
+  physician:"Guide them to the physician's station.",
+  pharmacy:"Guide them to the pharmacy counter to collect medication."
+};
+
+function renderStats(){
+  const q = db_getQueue();
+  const counts = { triage:0, physician:0, pharmacy:0 };
+  q.forEach(e => { if(counts[e.station] !== undefined) counts[e.station]++; });
+  const el = qs("#stationStats");
+  el.innerHTML = Object.keys(counts).map(k => `
+    <div class="stat">
+      <div class="num">${counts[k]}</div>
+      <div class="label">waiting at ${STATION_LABEL[k]}</div>
+    </div>
+  `).join("");
+}
+
+function renderFullQueue(){
+  const q = db_getQueue().slice().sort((a,b) => a.arrived.localeCompare(b.arrived));
+  const el = qs("#fullQueue");
+  if(q.length === 0){ el.innerHTML = `<p class="muted small">No one currently waiting.</p>`; return; }
+  el.innerHTML = "";
+  q.forEach(e => {
+    const p = db_getPatient(e.patientId);
+    if(!p) return;
+    const div = document.createElement("div");
+    div.className = "queue-item" + (e.urgent ? " urgent" : "");
+    div.innerHTML = `
+      <div class="queue-left">
+        <div class="avatar"><img src="${avatarDataUri(p.name)}" alt=""></div>
+        <div><div class="queue-name">${p.name}</div><div class="queue-meta">arrived ${e.arrived} · now at ${STATION_LABEL[e.station]}</div></div>
+      </div>
+      <span class="badge badge-slate">${STATION_LABEL[e.station]}</span>
+    `;
+    el.appendChild(div);
+  });
+}
+
+qs("#runnerSearch").addEventListener("input", (e) => {
+  const term = e.target.value.trim().toLowerCase();
+  const el = qs("#runnerResults");
+  if(!term){ el.innerHTML = ""; return; }
+  const matches = db_getPatients().filter(p => p.name.toLowerCase().includes(term)).slice(0,5);
+  el.innerHTML = matches.map(p => {
+    const entry = db_getQueue().find(e => e.patientId === p.id);
+    const station = entry ? entry.station : null;
+    return `<div class="match-card">
+      <div class="match-photo"><img src="${avatarDataUri(p.name)}" alt=""></div>
+      <div class="match-info">
+        <div class="match-name">${p.name}</div>
+        <div class="match-meta">${station ? "Next: " + STATION_LABEL[station] + " — " + STATION_DIRECTION[station] : "Not currently in the queue"}</div>
+      </div>
+    </div>`;
+  }).join("") || `<p class="muted small">No match.</p>`;
+});
+
+renderStats();
+renderFullQueue();
+setInterval(() => { renderStats(); renderFullQueue(); }, 4000);
+</script>
+</body>
+</html>

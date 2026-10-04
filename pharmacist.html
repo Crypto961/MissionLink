@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pharmacist — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Pharmacist</span></div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span class="role-pill role-pharmacist"><span class="dot"></span>Pharmacist</span>
+    <a class="exit-link" href="index.html">Switch role</a>
+  </div>
+</header>
+
+<main class="wide">
+  <div class="grid-2" style="grid-template-columns:1fr 1fr; align-items:start;">
+
+    <div class="card">
+      <h2>Prescriptions waiting</h2>
+      <div id="rxQueue"></div>
+    </div>
+
+    <div class="card">
+      <h2>Stock on hand</h2>
+      <p class="small muted">Tapping "dispensed" above is the only data entry this ever needs — the bars below update from that alone.</p>
+      <div id="stockList"></div>
+    </div>
+
+  </div>
+</main>
+<footer class="app-foot">MissionLink · Pharmacist</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="js/inventory.js"></script>
+<script>
+db_seedIfEmpty();
+
+function renderRxQueue(){
+  const entries = db_getQueue("pharmacy");
+  const el = qs("#rxQueue");
+  if(entries.length === 0){ el.innerHTML = `<p class="muted small">Nothing waiting.</p>`; return; }
+  el.innerHTML = "";
+  entries.forEach(e => {
+    const p = db_getPatient(e.patientId);
+    if(!p) return;
+    const v = latestVisit(p);
+    const items = (v.prescription||[]).map(sku => db_getInventory().find(i=>i.sku===sku)).filter(Boolean);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.marginBottom = "10px";
+    card.innerHTML = `
+      <div class="queue-left" style="margin-bottom:8px;">
+        <div class="avatar"><img src="${avatarDataUri(p.name)}" alt=""></div>
+        <div><div class="queue-name">${p.name}</div><div class="queue-meta">${p.id} · ${missionForCode(p.country).country}</div></div>
+      </div>
+      ${items.length ? items.map(i => `<div class="small">• ${i.name} <span class="muted">(${i.onHand} on hand)</span></div>`).join("") : '<p class="small muted">No items on this order.</p>'}
+      <button class="btn btn-primary btn-block" style="margin-top:10px;" ${items.length ? "" : "disabled"}>Mark dispensed</button>
+    `;
+    card.querySelector("button").addEventListener("click", () => {
+      const results = dispensePrescription(items.map(i=>i.sku), p.id);
+      const failed = results.filter(r => !r.ok);
+      if(failed.length){
+        toast("Short on: " + failed.map(f=>f.name).join(", "));
+      } else {
+        toast("Dispensed to " + p.name);
+      }
+      db_removeFromQueue(p.id);
+      renderRxQueue();
+      renderStock();
+    });
+    el.appendChild(card);
+  });
+}
+
+function renderStock(){
+  const el = qs("#stockList");
+  el.innerHTML = "";
+  db_getInventory().forEach(item => {
+    const low = item.onHand <= item.parLevel;
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML = `
+      <div class="name">${item.name}${low ? ' <span class="badge badge-danger" style="margin-left:4px;">low</span>' : ""}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${stockPct(item)}%; ${low ? "background:var(--danger);" : ""}"></div></div>
+      <div class="val">${item.onHand}</div>
+    `;
+    el.appendChild(row);
+  });
+}
+
+renderRxQueue();
+renderStock();
+setInterval(() => { renderRxQueue(); renderStock(); }, 4000);
+</script>
+</body>
+</html>

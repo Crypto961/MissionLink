@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patient — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Patient</span></div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span class="role-pill role-patient"><span class="dot"></span>Patient</span>
+    <a class="exit-link" href="index.html">Switch role</a>
+  </div>
+</header>
+
+<main>
+  <div class="card" id="searchCard">
+    <h2>Find my pass</h2>
+    <p class="muted small">Lost your card? A staff member can look you up by name instead — this screen is for finding your own pass with your ID or name.</p>
+    <div class="field">
+      <label for="pSearch">Your name or pass ID</label>
+      <input type="text" id="pSearch" placeholder="e.g. Amina Wanjiru or ML-KE-0001">
+    </div>
+    <button class="btn btn-primary" id="btnFind">Find my pass</button>
+    <div id="pResults" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card" id="passCard" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+      <div>
+        <h2 id="passName" style="font-size:20px;"></h2>
+        <p class="muted" id="passMeta"></p>
+      </div>
+      <div class="qr-wrap">
+        <div id="qrHolder"></div>
+      </div>
+    </div>
+    <p class="small muted" style="margin-top:6px;">Keep this card. If you lose it, staff can find your record again with your name.</p>
+
+    <div id="statusBlock" style="margin-top:14px;"></div>
+
+    <h3 style="margin-top:16px;">Your visits</h3>
+    <div id="historyBlock"></div>
+  </div>
+</main>
+<footer class="app-foot">MissionLink · Patient</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="js/qr.js"></script>
+<script>
+db_seedIfEmpty();
+
+qs("#btnFind").addEventListener("click", () => {
+  const term = qs("#pSearch").value.trim().toLowerCase();
+  if(!term) return;
+  const matches = db_getPatients().filter(p =>
+    p.id.toLowerCase() === term || p.name.toLowerCase().includes(term)
+  );
+  const el = qs("#pResults");
+  if(matches.length === 1){
+    openPass(matches[0]);
+    el.innerHTML = "";
+  } else if(matches.length > 1){
+    el.innerHTML = matches.map(p => `<div class="match-card" style="cursor:pointer;" data-id="${p.id}">
+      <div class="match-photo"><img src="${avatarDataUri(p.name)}" alt=""></div>
+      <div class="match-info"><div class="match-name">${p.name}</div><div class="match-meta">${p.id}</div></div>
+    </div>`).join("");
+    qsa("#pResults .match-card").forEach(c => c.addEventListener("click", () => openPass(db_getPatient(c.dataset.id))));
+  } else {
+    el.innerHTML = `<p class="muted small">No pass found. Ask a staff member at registration for help.</p>`;
+  }
+});
+
+function openPass(p){
+  qs("#searchCard").style.display = "none";
+  qs("#passCard").style.display = "block";
+  qs("#passName").textContent = p.name;
+  qs("#passMeta").textContent = `${missionForCode(p.country).camp}, ${missionForCode(p.country).country}`;
+  renderPassCard(qs("#qrHolder"), p);
+
+  const entry = db_getQueue().find(e => e.patientId === p.id);
+  const statusEl = qs("#statusBlock");
+  if(entry){
+    const STATION_LABEL = { triage:"Triage — vitals and your symptoms", physician:"Seeing the physician next", pharmacy:"Pharmacy — your medication" };
+    statusEl.innerHTML = `<div class="card" style="background:var(--teal-pale); border-color:var(--teal);">
+      <h3 style="color:var(--teal-dark);">Today</h3>
+      <p class="small">${STATION_LABEL[entry.station] || entry.station}</p>
+    </div>`;
+  } else {
+    statusEl.innerHTML = "";
+  }
+
+  const hist = qs("#historyBlock");
+  if(p.visits.length === 0){
+    hist.innerHTML = `<p class="small muted">No visits recorded yet.</p>`;
+  } else {
+    hist.innerHTML = p.visits.slice().reverse().map(v => `
+      <div class="tl-item">
+        <div class="tl-date">${v.year}</div>
+        <div class="small">${v.diagnosis ? v.diagnosis : "Seen for: " + v.complaint}</div>
+      </div>
+    `).join("");
+  }
+}
+</script>
+</body>
+</html>

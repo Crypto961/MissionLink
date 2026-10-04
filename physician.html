@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Physician — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Physician</span></div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span class="role-pill role-physician"><span class="dot"></span>Physician</span>
+    <a class="exit-link" href="index.html">Switch role</a>
+  </div>
+</header>
+
+<main class="wide">
+  <div class="grid-2" style="grid-template-columns:320px 1fr; align-items:start;">
+
+    <div class="card">
+      <h2>Waiting room</h2>
+      <div id="queueList"></div>
+    </div>
+
+    <div class="card" id="chartCard" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h2 id="pName">—</h2>
+          <p class="muted" id="pMeta"></p>
+        </div>
+        <span class="badge badge-amber" id="pCategory">—</span>
+      </div>
+
+      <div class="card" style="background:var(--paper); margin-top:12px;">
+        <h3>Current complaint</h3>
+        <p id="pComplaint" class="small"></p>
+        <p class="small muted" id="pVitals"></p>
+      </div>
+
+      <div id="historySection"></div>
+
+      <h3 style="margin-top:16px;">Assessment &amp; orders</h3>
+      <div class="btn-row" style="margin-bottom:8px;">
+        <button class="mic-btn" id="micBtn"><span class="mic-dot"></span><span id="micLabel">Dictate note</span></button>
+      </div>
+      <div class="transcript-box" id="transcript">Tap the mic, or type below.</div>
+      <div class="field" style="margin-top:8px;">
+        <label for="diagText">Diagnosis / notes (your own clinical judgment — nothing here is AI-generated)</label>
+        <textarea id="diagText"></textarea>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label><input type="checkbox" id="labOrder"> Order a lab / rapid test</label>
+          <input type="text" id="labResult" placeholder="Result, once available" style="margin-top:6px; display:none;">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Prescription</label>
+        <div id="rxOptions" class="btn-row"></div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="btnComplete" style="margin-top:12px;">Complete visit</button>
+    </div>
+
+    <div class="card" id="emptyState">
+      <p class="muted">Select a patient from the waiting room.</p>
+    </div>
+  </div>
+</main>
+<footer class="app-foot">MissionLink · Physician</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/inventory.js"></script>
+<script>
+db_seedIfEmpty();
+let current = null;
+
+function renderQueue(){
+  const entries = db_getQueue("physician");
+  const list = qs("#queueList");
+  if(entries.length === 0){ list.innerHTML = `<p class="muted small">No one waiting.</p>`; return; }
+  list.innerHTML = "";
+  entries.forEach(e => {
+    const p = db_getPatient(e.patientId);
+    if(!p) return;
+    const v = latestVisit(p);
+    const div = document.createElement("div");
+    div.className = "queue-item" + (e.urgent ? " urgent" : "");
+    div.style.cursor = "pointer";
+    div.innerHTML = `
+      <div class="queue-left">
+        <div class="avatar"><img src="${avatarDataUri(p.name)}" alt=""></div>
+        <div>
+          <div class="queue-name">${p.name}</div>
+          <div class="queue-meta">${categoryLabel(v.category)} · arrived ${e.arrived}</div>
+        </div>
+      </div>
+      ${e.urgent ? '<span class="badge badge-danger">Urgent</span>' : ''}
+    `;
+    div.addEventListener("click", () => openChart(p));
+    list.appendChild(div);
+  });
+}
+
+function openChart(p){
+  current = p;
+  qs("#emptyState").style.display = "none";
+  qs("#chartCard").style.display = "block";
+  const v = latestVisit(p);
+
+  qs("#pName").textContent = p.name;
+  qs("#pMeta").textContent = `${p.sex} · approx. age ${p.approxAge} · ${missionForCode(p.country).country}` +
+    (p.allergies.length ? ` · allergies: ${p.allergies.join(", ")}` : " · no known allergies");
+  qs("#pCategory").textContent = categoryLabel(v.category);
+  qs("#pComplaint").textContent = `"${v.complaint}"`;
+  qs("#pVitals").textContent = `BP ${v.vitals.bp || "—"} · Temp ${v.vitals.temp || "—"}°C · Weight ${v.vitals.weight || "—"}kg · Height ${v.vitals.height || "—"}cm`;
+
+  const prior = priorVisits(p);
+  const hist = qs("#historySection");
+  if(prior.length){
+    hist.innerHTML = `<h3 style="margin-top:14px;">Visit history</h3>` + prior.slice().reverse().map(pv => `
+      <div class="tl-item">
+        <div class="tl-date">${pv.year}</div>
+        <div class="small">"${pv.complaint}" — ${pv.diagnosis || "no diagnosis recorded"}.
+        ${pv.prescription.length ? "Prescribed: " + pv.prescription.map(sku => (INVENTORY_SEED.find(i=>i.sku===sku)||{}).name || sku).join(", ") + "." : "No medication given."}</div>
+      </div>
+    `).join("");
+  } else {
+    hist.innerHTML = `<p class="small muted" style="margin-top:10px;">No prior visits on file — new patient.</p>`;
+  }
+
+  qs("#diagText").value = "";
+  qs("#transcript").textContent = "Tap the mic, or type below.";
+  qs("#labOrder").checked = false;
+  qs("#labResult").style.display = "none";
+  qs("#labResult").value = "";
+
+  const rx = qs("#rxOptions");
+  rx.innerHTML = "";
+  db_getInventory().forEach(item => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-secondary";
+    b.style.fontSize = "13px";
+    b.style.padding = "8px 12px";
+    b.textContent = item.name;
+    b.dataset.sku = item.sku;
+    b.addEventListener("click", () => b.classList.toggle("btn-primary"));
+    rx.appendChild(b);
+  });
+
+  const micBtn = qs("#micBtn");
+  const newMic = micBtn.cloneNode(true);
+  micBtn.parentNode.replaceChild(newMic, micBtn);
+  attachSpeechToText(newMic, qs("#transcript"), {
+    lang: "en-US",
+    onInterim: (text) => qs("#diagText").value = text,
+    onFinal: (text) => qs("#diagText").value = text
+  });
+}
+
+qs("#labOrder").addEventListener("change", (e) => {
+  qs("#labResult").style.display = e.target.checked ? "block" : "none";
+});
+
+qs("#btnComplete").addEventListener("click", () => {
+  if(!current) return;
+  const v = latestVisit(current);
+  v.diagnosis = qs("#diagText").value.trim();
+  v.labOrdered = qs("#labOrder").checked;
+  if(v.labOrdered) v.labResult = qs("#labResult").value.trim();
+  const chosenSkus = qsa("#rxOptions .btn-primary").map(b => b.dataset.sku);
+  v.prescription = chosenSkus;
+  // the visit object was mutated in place above; persist the whole patient record back to storage
+  db_savePatient(current);
+
+  if(chosenSkus.length){
+    db_moveToStation(current.id, "pharmacy");
+    toast(current.name + " sent to pharmacy");
+  } else {
+    db_removeFromQueue(current.id);
+    toast(current.name + "'s visit completed");
+  }
+  qs("#chartCard").style.display = "none";
+  qs("#emptyState").style.display = "block";
+  current = null;
+  renderQueue();
+});
+
+renderQueue();
+setInterval(renderQueue, 4000);
+</script>
+</body>
+</html>

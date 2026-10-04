@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mission dashboard — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Mission dashboard</span></div>
+  </div>
+  <a class="exit-link" href="index.html">Switch role</a>
+</header>
+
+<main class="wide">
+
+  <div class="grid-3" id="topStats"></div>
+
+  <div class="grid-2" style="margin-top:14px;">
+    <div class="card">
+      <h2>Visits by camp</h2>
+      <div id="byCountry"></div>
+    </div>
+    <div class="card">
+      <h2>Visits by category</h2>
+      <div id="byCategory"></div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-top:14px;">
+    <div class="card">
+      <h2>Visits by language</h2>
+      <p class="small muted">Every interaction tagged by language is a line of evidence for which locales need stronger voice and translation coverage next.</p>
+      <div id="byLanguage"></div>
+    </div>
+    <div class="card">
+      <h2>Continuity</h2>
+      <div class="grid-2" style="gap:10px; margin-top:4px;">
+        <div class="stat"><div class="num" id="returningNum">0</div><div class="label">returning patients, prior record found</div></div>
+        <div class="stat"><div class="num" id="newNum">0</div><div class="label">new patients registered</div></div>
+      </div>
+      <p class="small muted" style="margin-top:10px;">Every returning patient here is a clinician who started from a brief instead of from zero.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <h2>Pharmacy — stock and next-mission packing list</h2>
+    <div id="stockFull"></div>
+    <h3 style="margin-top:14px;">Pack more of next time</h3>
+    <div id="packing"></div>
+  </div>
+
+</main>
+<footer class="app-foot">MissionLink · Mission dashboard · auto-generated from today's records, nothing entered twice</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/reports.js"></script>
+<script>
+db_seedIfEmpty();
+const r = reportSummary();
+
+qs("#topStats").innerHTML = `
+  <div class="stat"><div class="num">${r.totalPatients}</div><div class="label">patients on file</div></div>
+  <div class="stat"><div class="num">${r.totalVisits}</div><div class="label">visits recorded</div></div>
+  <div class="stat"><div class="num">${r.dispensedTotal}</div><div class="label">items dispensed</div></div>
+`;
+
+function barList(el, dataObj, labelFn){
+  const entries = Object.entries(dataObj).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const max = Math.max(1, ...entries.map(e => e[1]));
+  el.innerHTML = entries.map(([k,v]) => `
+    <div class="bar-row">
+      <div class="name">${labelFn(k)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(v/max*100)}%;"></div></div>
+      <div class="val">${v}</div>
+    </div>
+  `).join("") || `<p class="small muted">No data yet.</p>`;
+}
+
+barList(qs("#byCountry"), r.byCountry, k => missionForCode(k) ? missionForCode(k).country : k);
+barList(qs("#byCategory"), r.byCategory, k => categoryLabel(k));
+barList(qs("#byLanguage"), r.byLanguage, k => k);
+
+qs("#returningNum").textContent = r.returningCount;
+qs("#newNum").textContent = r.newCount;
+
+const stockEl = qs("#stockFull");
+stockEl.innerHTML = "";
+db_getInventory().forEach(item => {
+  const low = item.onHand <= item.parLevel;
+  const row = document.createElement("div");
+  row.className = "bar-row";
+  row.innerHTML = `
+    <div class="name">${item.name}${low ? ' <span class="badge badge-danger" style="margin-left:4px;">low</span>' : ""}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${stockPct(item)}%; ${low ? "background:var(--danger);" : ""}"></div></div>
+    <div class="val">${item.onHand}</div>
+  `;
+  stockEl.appendChild(row);
+});
+
+const pack = packingSuggestions();
+qs("#packing").innerHTML = pack.length
+  ? pack.map(p => `<span class="badge badge-rust" style="margin:0 6px 6px 0;">${p.name} — pack ${p.suggestion} more</span>`).join("")
+  : `<p class="small muted">Nothing below par level right now.</p>`;
+</script>
+</body>
+</html>
