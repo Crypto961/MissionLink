@@ -90,7 +90,9 @@ a{color:var(--teal-dark);}
 .role-runner .dot, .role-runner{color:var(--teal-dark); border-color:var(--line-strong);}
 .role-runner .dot{background:var(--ink-soft);}
 
-.exit-link{font-size:13px; color:var(--ink-soft); text-decoration:none; border:1px solid var(--line); padding:6px 10px; border-radius:8px;}
+.exit-link{display:inline-flex; align-items:center; min-height:40px; font-size:13px; color:var(--ink-soft); text-decoration:none; border:1px solid var(--line-strong); padding:6px 12px; border-radius:8px;}
+.header-actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;}
+.header-actions nav{display:contents;}
 .exit-link:hover{border-color:var(--line-strong);}
 
 main{max-width:980px; margin:0 auto; padding:20px 20px 60px;}
@@ -126,9 +128,20 @@ textarea{resize:vertical; min-height:70px;}
 input:focus, select:focus, textarea:focus, button:focus-visible{
   outline:2px solid var(--teal); outline-offset:1px;
 }
+/* Visible keyboard focus everywhere (WCAG 2.4.7) — thicker ring for links and
+   card-like controls so it reads in bright outdoor light */
+a:focus-visible, .btn:focus-visible, .mic-btn:focus-visible, .queue-item:focus-visible,
+.match-card:focus-visible, .role-card:focus-visible, [tabindex]:focus-visible{
+  outline:3px solid var(--teal-dark); outline-offset:2px;
+}
+::placeholder{color:#5F6662; opacity:1;}
 .field{margin-bottom:12px;}
-.field-row{display:flex; gap:10px;}
-.field-row > .field{flex:1;}
+.field-row{display:flex; gap:10px; flex-wrap:wrap;}
+.field-row > .field{flex:1 1 140px;}
+fieldset{border:0; margin:0 0 12px; padding:0; min-width:0;}
+legend{display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin:0 0 4px; padding:0;}
+label.check{display:flex; align-items:center; gap:8px; font-size:14px; color:var(--ink); min-height:32px; cursor:pointer;}
+label.check input{width:20px; height:20px; margin:0;}
 
 .btn{
   display:inline-flex; align-items:center; justify-content:center; gap:8px;
@@ -144,6 +157,9 @@ input:focus, select:focus, textarea:focus, button:focus-visible{
 .btn-block{width:100%;}
 .btn[disabled]{opacity:0.5; cursor:not-allowed;}
 .btn-row{display:flex; gap:10px; flex-wrap:wrap;}
+/* Toggle buttons: selected state shown by a check mark as well as colour */
+.btn[aria-pressed="true"], .btn[aria-pressed="true"]:hover{background:var(--teal); border-color:var(--teal-dark); color:#fff;}
+.btn[aria-pressed="true"]::before{content:"\2713"; font-weight:700;}
 
 /* ---------- Mic / speech ---------- */
 .mic-btn{
@@ -177,6 +193,11 @@ input:focus, select:focus, textarea:focus, button:focus-visible{
   padding:13px 14px; border:1px solid var(--line); border-radius:11px; background:#fff;
   margin-bottom:9px; gap:12px;
 }
+.queue-item{width:100%; font:inherit; color:inherit; text-align:left;}
+button.queue-item, button.match-card{cursor:pointer; width:100%; font:inherit; color:inherit; text-align:left;}
+button.queue-item:hover, button.match-card:hover{border-color:var(--line-strong);}
+.queue-item[aria-current="true"]{border-color:var(--teal); box-shadow:inset 4px 0 0 var(--teal);}
+.queue-list{list-style:none; margin:0; padding:0;}
 .queue-item.urgent{border-color:var(--danger); background:var(--danger-pale);}
 .queue-left{display:flex; align-items:center; gap:12px;}
 .avatar{
@@ -188,6 +209,11 @@ input:focus, select:focus, textarea:focus, button:focus-visible{
 .queue-name{font-weight:600; font-size:14.5px;}
 .queue-meta{font-size:12.5px; color:var(--ink-soft);}
 
+/* ---------- Layout helpers ---------- */
+.grid-sidebar{grid-template-columns:320px 1fr; align-items:start;}
+.grid-sidebar > .card{margin-top:0;}
+@media (max-width:760px){ .grid-sidebar{grid-template-columns:1fr;} }
+
 /* ---------- Dashboard stat cards ---------- */
 .stat{
   background:#fff; border:1px solid var(--line); border-radius:var(--radius-lg);
@@ -196,7 +222,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible{
 .stat .num{font-size:28px; font-weight:700; letter-spacing:-0.02em;}
 .stat .label{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
 .bar-row{display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:13px;}
-.bar-row .name{width:120px; flex:none; color:var(--ink-soft);}
+.bar-row .name{width:120px; flex:none; color:var(--ink-soft); overflow-wrap:anywhere;}
 .bar-track{flex:1; height:9px; background:var(--paper); border-radius:5px; overflow:hidden;}
 .bar-fill{height:100%; background:var(--teal); border-radius:5px;}
 .bar-row .val{width:34px; flex:none; text-align:right; font-weight:600;}
@@ -254,7 +280,31 @@ input:focus, select:focus, textarea:focus, button:focus-visible{
 
 footer.app-foot{max-width:980px; margin:30px auto 10px; padding:0 20px; color:var(--ink-soft); font-size:12px;}
 
+/* ---------- Accessibility helpers ---------- */
+.visually-hidden{
+  position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+.skip-link{
+  position:absolute; left:12px; top:-60px; z-index:100;
+  background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px; font-weight:600; text-decoration:none;
+}
+.skip-link:focus{top:12px;}
+h1.page-title{font-size:20px; margin-bottom:12px;}
+[tabindex="-1"]:focus{outline:none;}
+
 @media (prefers-reduced-motion: reduce){
   .mic-btn.listening{animation:none;}
-  .role-card{transition:none;}
+  .role-card, #toast{transition:none;}
+  .role-card:hover{transform:none;}
 }
+
+/* Windows high-contrast / forced colours: keep bars, dots and states visible */
+@media (forced-colors: active){
+  .bar-fill, .role-pill .dot, .mic-dot, .tl-item::before{background:CanvasText; forced-color-adjust:none;}
+  .bar-track{border:1px solid CanvasText;}
+  .queue-item[aria-current="true"]{outline:3px solid Highlight;}
+  .mic-btn.listening{outline:3px solid Highlight;}
+}
+.role-grid > li{display:flex;}
+.role-grid > li > .role-card{flex:1;}

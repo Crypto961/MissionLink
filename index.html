@@ -7,14 +7,15 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to main content</a>
 <header class="app-header">
   <div class="brand">
-    <div class="brand-mark">ML</div>
+    <div class="brand-mark" aria-hidden="true">ML</div>
     <div class="brand-text"><strong>MissionLink</strong><span>On a mission to heal</span></div>
   </div>
 </header>
 
-<main>
+<main id="main" tabindex="-1">
   <div class="card">
     <h1 style="font-size:22px;">Patient continuity and camp operations, built for the field</h1>
     <p class="muted">One record that follows a patient between missions, in Kenya, Mauritania, Peru and Lebanon —
@@ -22,41 +23,44 @@
       All data on this page is synthetic demo data stored only in this browser.</p>
   </div>
 
-  <div class="role-grid">
-    <a class="role-card" href="patient.html">
-      <div class="ic role-patient" style="background:var(--teal-pale);">●</div>
+  <nav aria-labelledby="roleHeading">
+  <h2 id="roleHeading" class="visually-hidden">Choose a role</h2>
+  <ul class="role-grid" style="list-style:none; padding:0;">
+    <li><a class="role-card" href="patient.html">
+      <div aria-hidden="true" class="ic role-patient" style="background:var(--teal-pale);">●</div>
       <h3>Patient</h3>
       <p>Look up a pass, or find a record after a lost card.</p>
-    </a>
-    <a class="role-card" href="triage.html">
-      <div class="ic role-triage" style="background:var(--amber-pale);">●</div>
+    </a></li>
+    <li><a class="role-card" href="triage.html">
+      <div aria-hidden="true" class="ic role-triage" style="background:var(--amber-pale);">●</div>
       <h3>Triage nurse</h3>
       <p>Register, log vitals, capture the chief complaint by voice.</p>
-    </a>
-    <a class="role-card" href="physician.html">
-      <div class="ic role-physician" style="background:var(--slate-pale);">●</div>
+    </a></li>
+    <li><a class="role-card" href="physician.html">
+      <div aria-hidden="true" class="ic role-physician" style="background:var(--slate-pale);">●</div>
       <h3>Physician</h3>
       <p>See the prior-visit brief, examine, order care by voice or text.</p>
-    </a>
-    <a class="role-card" href="pharmacist.html">
-      <div class="ic role-pharmacist" style="background:var(--rust-pale);">●</div>
+    </a></li>
+    <li><a class="role-card" href="pharmacist.html">
+      <div aria-hidden="true" class="ic role-pharmacist" style="background:var(--rust-pale);">●</div>
       <h3>Pharmacist</h3>
       <p>Dispense against a prescription; stock updates itself.</p>
-    </a>
-    <a class="role-card" href="runner.html">
-      <div class="ic role-runner" style="background:var(--slate-pale);">●</div>
+    </a></li>
+    <li><a class="role-card" href="runner.html">
+      <div aria-hidden="true" class="ic role-runner" style="background:var(--slate-pale);">●</div>
       <h3>Runner</h3>
       <p>See where each patient goes next and how each line is moving.</p>
-    </a>
-    <a class="role-card" href="dashboard.html">
-      <div class="ic" style="background:var(--paper); color:var(--ink-soft);">●</div>
+    </a></li>
+    <li><a class="role-card" href="dashboard.html">
+      <div aria-hidden="true" class="ic" style="background:var(--paper); color:var(--ink-soft);">●</div>
       <h3>Mission dashboard</h3>
       <p>Today's numbers, by country, category and language.</p>
-    </a>
-  </div>
+    </a></li>
+  </ul>
+  </nav>
 
   <div class="card" style="margin-top:18px;">
-    <h3>What's demo vs. production in this build</h3>
+    <h2 style="font-size:14px;">What's demo vs. production in this build</h2>
     <p class="small muted">Local storage stands in for the self-hosted offline server; the browser's built-in
       speech recognition stands in for an on-device model; QR is real and scannable, NFC is represented in the UI
       only (it needs real hardware). None of this is hidden — every substitution is called out in code comments

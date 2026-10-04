@@ -7,17 +7,24 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to main content</a>
 <header class="app-header">
   <div class="brand">
-    <div class="brand-mark">ML</div>
+    <div class="brand-mark" aria-hidden="true">ML</div>
     <div class="brand-text"><strong>MissionLink</strong><span>Mission dashboard</span></div>
   </div>
-  <a class="exit-link" href="index.html">Switch role</a>
+  <div class="header-actions">
+    <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
+  </div>
 </header>
 
-<main class="wide">
+<main class="wide" id="main" tabindex="-1">
+  <h1 class="visually-hidden">Mission dashboard</h1>
 
-  <div class="grid-3" id="topStats"></div>
+  <section aria-labelledby="topHeading">
+    <h2 id="topHeading" class="visually-hidden">Totals</h2>
+    <ul class="grid-3 queue-list" id="topStats"></ul>
+  </section>
 
   <div class="grid-2" style="margin-top:14px;">
     <div class="card">
@@ -48,6 +55,7 @@
 
   <div class="card" style="margin-top:14px;">
     <h2>Pharmacy — stock and next-mission packing list</h2>
+    <h3 style="margin-top:8px;">Stock on hand</h3>
     <div id="stockFull"></div>
     <h3 style="margin-top:14px;">Pack more of next time</h3>
     <div id="packing"></div>
@@ -65,21 +73,23 @@ db_seedIfEmpty();
 const r = reportSummary();
 
 qs("#topStats").innerHTML = `
-  <div class="stat"><div class="num">${r.totalPatients}</div><div class="label">patients on file</div></div>
-  <div class="stat"><div class="num">${r.totalVisits}</div><div class="label">visits recorded</div></div>
-  <div class="stat"><div class="num">${r.dispensedTotal}</div><div class="label">items dispensed</div></div>
+  <li class="stat"><div class="num">${r.totalPatients}</div><div class="label">patients on file</div></li>
+  <li class="stat"><div class="num">${r.totalVisits}</div><div class="label">visits recorded</div></li>
+  <li class="stat"><div class="num">${r.dispensedTotal}</div><div class="label">items dispensed</div></li>
 `;
 
+// Bars are drawn for sighted users; each row is a list item whose text
+// ("Kenya: 3 visits") carries the full value for screen readers.
 function barList(el, dataObj, labelFn){
   const entries = Object.entries(dataObj).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
   const max = Math.max(1, ...entries.map(e => e[1]));
-  el.innerHTML = entries.map(([k,v]) => `
-    <div class="bar-row">
-      <div class="name">${labelFn(k)}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(v/max*100)}%;"></div></div>
-      <div class="val">${v}</div>
-    </div>
-  `).join("") || `<p class="small muted">No data yet.</p>`;
+  el.innerHTML = entries.length ? `<ul class="queue-list">` + entries.map(([k,v]) => `
+    <li class="bar-row">
+      <div class="name">${esc(labelFn(k))}<span class="visually-hidden">:</span></div>
+      <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="width:${Math.round(v/max*100)}%;"></div></div>
+      <div class="val">${v}<span class="visually-hidden"> ${v === 1 ? "visit" : "visits"}</span></div>
+    </li>
+  `).join("") + `</ul>` : `<p class="small muted">No data yet.</p>`;
 }
 
 barList(qs("#byCountry"), r.byCountry, k => missionForCode(k) ? missionForCode(k).country : k);
@@ -89,23 +99,11 @@ barList(qs("#byLanguage"), r.byLanguage, k => k);
 qs("#returningNum").textContent = r.returningCount;
 qs("#newNum").textContent = r.newCount;
 
-const stockEl = qs("#stockFull");
-stockEl.innerHTML = "";
-db_getInventory().forEach(item => {
-  const low = item.onHand <= item.parLevel;
-  const row = document.createElement("div");
-  row.className = "bar-row";
-  row.innerHTML = `
-    <div class="name">${item.name}${low ? ' <span class="badge badge-danger" style="margin-left:4px;">low</span>' : ""}</div>
-    <div class="bar-track"><div class="bar-fill" style="width:${stockPct(item)}%; ${low ? "background:var(--danger);" : ""}"></div></div>
-    <div class="val">${item.onHand}</div>
-  `;
-  stockEl.appendChild(row);
-});
+qs("#stockFull").innerHTML = stockRowsHtml(db_getInventory());
 
 const pack = packingSuggestions();
 qs("#packing").innerHTML = pack.length
-  ? pack.map(p => `<span class="badge badge-rust" style="margin:0 6px 6px 0;">${p.name} — pack ${p.suggestion} more</span>`).join("")
+  ? `<ul class="queue-list" style="display:flex; flex-wrap:wrap;">` + pack.map(p => `<li class="badge badge-rust" style="margin:0 6px 6px 0;">${esc(p.name)} — pack ${p.suggestion} more</li>`).join("") + `</ul>`
   : `<p class="small muted">Nothing below par level right now.</p>`;
 </script>
 </body>

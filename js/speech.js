@@ -23,10 +23,21 @@ function speechSupported(){
 /* Wires a mic button + transcript box together.
    opts: { lang, onFinal(text), onInterim(text) } */
 function attachSpeechToText(button, transcriptBox, opts={}){
+  const label = button.querySelector("[data-mic-label]");
+  const idleText = label ? label.textContent : "";
+  button.type = "button";
+  button.setAttribute("aria-pressed", "false");
+
   if(!speechSupported()){
-    transcriptBox.insertAdjacentHTML("afterend",
-      `<div class="speech-unsupported">Speech capture needs Chrome or Edge with microphone access. Type the complaint instead for this demo.</div>`);
+    if(!transcriptBox.parentNode.querySelector(".speech-unsupported")){
+      const note = document.createElement("div");
+      note.className = "speech-unsupported";
+      note.id = (transcriptBox.id || "transcript") + "-unsupported";
+      note.textContent = "Speech capture needs Chrome or Edge with microphone access. Type in the text box instead for this demo.";
+      transcriptBox.insertAdjacentElement("afterend", note);
+    }
     button.disabled = true;
+    button.setAttribute("aria-describedby", (transcriptBox.id || "transcript") + "-unsupported");
     return null;
   }
 
@@ -39,6 +50,15 @@ function attachSpeechToText(button, transcriptBox, opts={}){
   let listening = false;
   let finalText = "";
 
+  // Listening state is exposed three ways: aria-pressed, the visible label, and a
+  // spoken toast — never by the red pulse alone.
+  function setListening(on){
+    listening = on;
+    button.classList.toggle("listening", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    if(label) label.textContent = on ? "Listening — tap to stop" : idleText;
+  }
+
   rec.onresult = (e) => {
     let interim = "";
     for(let i = e.resultIndex; i < e.results.length; i++){
@@ -50,15 +70,16 @@ function attachSpeechToText(button, transcriptBox, opts={}){
     if(opts.onInterim) opts.onInterim((finalText + interim).trim());
   };
 
-  rec.onerror = () => {
-    listening = false;
-    button.classList.remove("listening");
+  rec.onerror = (e) => {
+    setListening(false);
+    toast(e.error === "not-allowed" ? "Microphone access was blocked — type instead." : "Speech capture stopped — type instead or try again.");
   };
 
   rec.onend = () => {
-    listening = false;
-    button.classList.remove("listening");
+    const was = listening;
+    setListening(false);
     if(opts.onFinal) opts.onFinal(finalText.trim());
+    if(was) toast("Stopped listening");
   };
 
   button.addEventListener("click", () => {
@@ -67,9 +88,8 @@ function attachSpeechToText(button, transcriptBox, opts={}){
     } else {
       finalText = "";
       transcriptBox.textContent = "Listening…";
-      rec.start();
-      listening = true;
-      button.classList.add("listening");
+      try { rec.start(); } catch(err){ return; }
+      setListening(true);
     }
   });
 

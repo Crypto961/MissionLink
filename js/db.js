@@ -170,17 +170,59 @@ function avatarDataUri(name){
   return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
 }
 
-function toast(msg){
+/* Toast doubles as a polite live region so screen-reader users hear the same
+   confirmations sighted users see. Created once on load so it exists before the
+   first message (live regions added and filled at the same moment are often missed). */
+function toastEl(){
   let el = document.getElementById("toast");
   if(!el){
     el = document.createElement("div");
     el.id = "toast";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-atomic", "true");
     document.body.appendChild(el);
   }
-  el.textContent = msg;
+  return el;
+}
+function toast(msg){
+  const el = toastEl();
+  el.textContent = "";
+  // re-set on the next frame so a repeated identical message is still announced
+  requestAnimationFrame(() => { el.textContent = msg; });
   el.classList.add("show");
   clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove("show"), 2600);
+  el._t = setTimeout(() => el.classList.remove("show"), 5000);
+}
+if(document.body) toastEl(); else document.addEventListener("DOMContentLoaded", toastEl);
+
+/* Escape text before putting it into innerHTML templates — names and complaints
+   are user-entered, so they must never be parsed as markup. */
+function esc(value){
+  return String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+
+/* Move keyboard / screen-reader focus to a heading or region after the view
+   changes underneath the user (a card appears, the focused button disappears). */
+function focusEl(el){
+  if(!el) return;
+  if(!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+  el.focus();
+}
+
+/* Re-render helper for the auto-refreshing lists: only touches the DOM when the
+   underlying data changed, so the 4-second refresh doesn't steal keyboard focus
+   or make screen readers re-read the list. */
+function renderIfChanged(el, key, renderFn){
+  if(el._renderKey === key) return;
+  const hadFocus = el.contains(document.activeElement);
+  const focusId = hadFocus ? document.activeElement.dataset.focusId : null;
+  el._renderKey = key;
+  renderFn();
+  if(hadFocus){
+    const again = focusId && el.querySelector(`[data-focus-id="${CSS.escape(focusId)}"]`);
+    focusEl(again || el.closest("section, .card")?.querySelector("h2") || el);
+  }
 }
 
 function qs(sel, root=document){ return root.querySelector(sel); }

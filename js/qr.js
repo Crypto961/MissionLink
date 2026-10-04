@@ -11,11 +11,16 @@ function renderPassCard(container, patient){
   container.innerHTML = "";
   const box = document.createElement("div");
   box.className = "qr-box";
+  // The library draws a canvas and an unlabeled <img>; expose the whole box as
+  // one labeled image so screen readers announce the pass ID instead of nothing.
+  box.setAttribute("role", "img");
+  box.setAttribute("aria-label", `QR code for pass ${patient.id}`);
   container.appendChild(box);
 
   if(window.QRCode){
     new QRCode(box, { text: patient.id, width: 112, height: 112, correctLevel: QRCode.CorrectLevel.M });
   } else {
-    box.innerHTML = `<div class="muted small" style="width:112px;height:112px;display:flex;align-items:center;justify-content:center;text-align:center;">QR library not loaded</div>`;
+    box.setAttribute("aria-label", `QR code unavailable — pass ID ${patient.id}`);
+    box.innerHTML = `<div class="muted small" aria-hidden="true" style="width:112px;height:112px;display:flex;align-items:center;justify-content:center;text-align:center;">QR library not loaded</div>`;
   }
 }

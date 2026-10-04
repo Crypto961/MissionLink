@@ -17,13 +17,12 @@ This repo is a **self-contained static site** — no build step, no server, no n
 speech features need generally won't grant on a bare file URL). The simplest option:
 
 ```bash
-cd missionlink
 python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
 **On GitHub Pages:**
-1. Create a new GitHub repo and push this folder's contents to it.
+1. This repo already has the site at its root (with a `.nojekyll` file so GitHub serves it as-is).
 2. Repo Settings → Pages → Deploy from branch → `main`, root folder.
 3. Your site is live at `https://<username>.github.io/<repo>/` within a minute or two — this is
    already a secure (https) context, so the microphone and speech features work without extra setup.
@@ -122,9 +121,35 @@ own review, not a feature flag to flip on.
 - Demo data is synthetic and clean. Real deployment will meet name spelling that varies across
   Latin, Arabic script and transliteration, shared family phones, and cards lost in the wash — the
   lookup tool is built to help with exactly this, but the demo data doesn't exercise it.
-- No accessibility audit has been done beyond keyboard-focus states and reduced-motion handling in
-  the CSS; a full pass (screen reader labels throughout, contrast check in direct sunlight) is
-  worth doing before any real pilot.
+- Accessibility has had an automated and code-level pass (see "Accessibility" below), but not yet a
+  session with real screen-reader users or a sunlight-contrast check on the actual field tablets —
+  both are worth doing before any real pilot.
+
+## Accessibility
+
+Every view targets WCAG 2.2 AA and passes axe-core (WCAG 2.0/2.1/2.2 A+AA and best-practice rules)
+with zero violations at desktop width and at 320px, including the interactive states (search
+results, open chart, open pass). What's in place:
+
+- **Structure** — skip link, one `<h1>` per page, labelled `<main>` / `<nav>` / `<section>`
+  landmarks, lists marked up as lists.
+- **Keyboard** — every action is a real `<button>` or link (waiting-room rows and patient matches
+  were clickable `<div>`s); searches and registration are `<form>`s so Enter submits; visible focus
+  rings on everything; focus moves to the new heading when a card opens and back to a sensible
+  place when the focused control disappears (sending a patient on, dispensing, completing a visit).
+- **Auto-refreshing queues** (physician, pharmacist, runner) only re-render when the data actually
+  changed, so the 4-second refresh no longer steals keyboard focus or makes screen readers re-read.
+- **Screen readers** — every input has a label; toasts are a polite live region; search results
+  are announced; QR passes are labelled with the pass ID; identical buttons carry the patient's name
+  ("Mark dispensed for …"); prescription toggles and the mic button expose `aria-pressed`; bar
+  charts and stock levels carry their numbers as text ("480 capsules on hand, par level 150").
+- **Errors** — missing required fields are flagged inline with `aria-invalid`, a text message and
+  focus on the field, not only a toast.
+- **Not colour alone** — urgent and low-stock states have text badges, selected prescriptions get a
+  check mark, the listening mic changes its label to "Listening — tap to stop".
+- **Reflow, motion, contrast** — no horizontal scroll at 320px, `prefers-reduced-motion` and Windows
+  high-contrast (`forced-colors`) handled, placeholder text meets 4.5:1.
+- **Safety** — user-entered names and complaints are HTML-escaped before rendering.
 
 ## Roadmap
 

@@ -32,3 +32,17 @@ function packingSuggestions(){
     .filter(i => i.onHand <= i.parLevel)
     .map(i => ({ sku:i.sku, name:i.name, suggestion: Math.max(i.parLevel * 2 - i.onHand, i.parLevel) }));
 }
+
+/* Stock rows shared by the pharmacist and dashboard views. The bar is visual
+   only; the row text ("Amoxicillin 250mg, low stock: 120 on hand, par level 150")
+   is what screen readers get, and "low" is a text badge, not just a red bar. */
+function stockRowsHtml(items){
+  return `<ul class="queue-list">` + items.map(item => {
+    const low = item.onHand <= item.parLevel;
+    return `<li class="bar-row">
+      <div class="name">${esc(item.name)}${low ? ' <span class="badge badge-danger" style="margin-left:4px;">low<span class="visually-hidden"> stock</span></span>' : ""}<span class="visually-hidden">:</span></div>
+      <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="width:${stockPct(item)}%; ${low ? "background:var(--danger);" : ""}"></div></div>
+      <div class="val">${item.onHand}<span class="visually-hidden"> ${esc(item.unit)} on hand, par level ${item.parLevel}</span></div>
+    </li>`;
+  }).join("") + `</ul>`;
+}

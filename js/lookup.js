@@ -70,19 +70,26 @@ function renderCandidates(container, candidates, onConfirm){
     container.innerHTML = `<p class="muted">No close matches yet — refine the search, or register as a new patient.</p>`;
     return;
   }
+  const heading = document.createElement("p");
+  heading.className = "visually-hidden";
+  heading.textContent = `${candidates.length} possible ${candidates.length === 1 ? "match" : "matches"} found.`;
+  container.appendChild(heading);
+  const list = document.createElement("ul");
+  list.className = "queue-list";
   candidates.forEach(({patient, reasons}) => {
-    const row = document.createElement("div");
+    const row = document.createElement("li");
     row.className = "match-card";
     row.innerHTML = `
-      <div class="match-photo"><img src="${avatarDataUri(patient.name)}" alt=""></div>
+      <div class="match-photo"><img src="${avatarDataUri(patient.name)}" alt="Reference photo of ${esc(patient.name)}"></div>
       <div class="match-info">
-        <div class="match-name">${patient.name}</div>
-        <div class="match-meta">${patient.sex} · approx. age ${patient.approxAge} · ${missionForCode(patient.country).country}</div>
-        <div class="match-meta small">${reasons.join(", ") || "possible match"}</div>
+        <div class="match-name">${esc(patient.name)}</div>
+        <div class="match-meta">${esc(patient.sex)} · approx. age ${esc(patient.approxAge)} · ${esc(missionForCode(patient.country).country)}</div>
+        <div class="match-meta small">${esc(reasons.join(", ") || "possible match")}</div>
       </div>
-      <button class="btn btn-secondary">Compare &amp; confirm</button>
+      <button type="button" class="btn btn-secondary">Compare &amp; confirm<span class="visually-hidden"> ${esc(patient.name)}</span></button>
     `;
     row.querySelector("button").addEventListener("click", () => onConfirm(patient));
-    container.appendChild(row);
+    list.appendChild(row);
   });
+  container.appendChild(list);
 }
