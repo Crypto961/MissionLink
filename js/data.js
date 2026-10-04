@@ -88,8 +88,8 @@ const PATIENTS_SEED = [
     visits:[
       { year:2025, date:"2025-11-12", vitals:{bp:"118/76",temp:"37.1",weight:"58",height:"160"},
         complaint:"Persistent cough and chest tightness for two weeks", category:"respiratory",
-        language:"Swahili", diagnosis:"Mild bronchitis", prescription:["AMOX-250"], labOrdered:false,
-        note:"Advised rest and follow-up if symptoms persist beyond 10 days." },
+        language:"Swahili", diagnosis:"Mild bronchitis", prescription:["PARA-500"], labOrdered:false,
+        note:"Penicillin allergy: antibiotics avoided. Advised rest, fluids and follow-up if symptoms persist beyond 10 days." },
       { year:2026, date:"2026-10-03", vitals:{bp:"122/78",temp:"36.9",weight:"59",height:"160"},
         complaint:"Follow-up, occasional cough returned", category:"respiratory",
         language:"Swahili", diagnosis:"Resolved, mild seasonal irritation", prescription:[], labOrdered:false,
