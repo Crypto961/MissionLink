@@ -42,6 +42,7 @@ All data is synthetic demo data (see `js/data.js`) stored only in the visiting b
 | `pharmacist.html` | Pharmacist | Dispensing queue; tapping "dispensed" is the only data entry — stock draws down automatically |
 | `runner.html` | Runner | Live count of who's waiting where, and a quick lookup for where to guide a specific patient next |
 | `patient.html` | Patient | A patient's own pass (QR) and a plain-language summary of their visit history |
+| `admin.html` | Admin / mission lead | Create and edit missions (camp, location, dates, hours, language), choose the current mission, manage staff and volunteers (role, specialty, languages, missions), edit pharmacy stock, import patient records from other or previous missions, download a backup, set API keys and defaults, reset the demo |
 | `dashboard.html` | Mission lead | Auto-generated end-of-mission numbers: visits by country/category/language, continuity count, stock levels, next-mission packing suggestions |
 
 ## Architecture
@@ -55,6 +56,7 @@ missionlink/
   js/lookup.js            non-biometric "find my record" matching (name + age + sex + camp)
   js/speech.js            speech-to-text wiring + the keyword chief-complaint classifier
   js/units.js             metric/US conversion for vitals (°C/°F, kg/lb, cm/in)
+  js/importer.js          patient import (CSV/JSON), preview and merge rules, backup export
   js/claude.js            Claude API layer: complaint summary/translation/sorting, note tidying, settings dialog
   js/qr.js                QR pass rendering
   js/inventory.js          dispensing + low-stock + packing-list logic
@@ -135,6 +137,35 @@ own review, not a feature flag to flip on.
 - Accessibility has had an automated and code-level pass (see "Accessibility" below), but not yet a
   session with real screen-reader users or a sunlight-contrast check on the actual field tablets —
   both are worth doing before any real pilot.
+
+## Admin & mission settings
+
+`admin.html` (the "Admin & mission settings" card on the landing page) is where a mission is set
+up. The demo comes prefilled with seven missions (Kenya, Mauritania and Peru in 2025 and 2026, and
+Lebanon in 2026), a 14-person synthetic volunteer roster, and the pharmacy stock. Everything can
+be edited, and new missions created.
+
+- **Current mission** — the one every station works on: its camp is preselected at registration,
+  its language drives speech capture, its team fills the "Triaged by" and "Seen by" lists, and its
+  name shows in every station's header.
+- **Missions** — country, country code, camp name, location, main patient language, start and end
+  dates, daily hours and notes. A new mission can copy the team from an earlier one. Missions in the
+  same country share a country code, so a returning patient keeps one record and one pass ID across
+  years.
+- **Staff & volunteers** — name, role (physician, nurse, pharmacist, runner, interpreter, general
+  volunteer, mission lead), specialty, languages, home country, and which missions they work. Visits
+  record who triaged and who saw the patient.
+- **Pharmacy inventory** — add items, set stock and par levels, remove items.
+- **Patient data** — import CSV (one row per visit; download the template from the page) or a
+  MissionLink backup JSON. A preview shows what will change before anything is saved. Records merge
+  by pass ID; rows without one get new IDs, likely duplicates are listed for a person to check, and
+  re-importing the same file adds nothing. Vitals can be in metric or US columns. "Download backup"
+  exports everything as JSON.
+- **API keys & settings** — organization name, default units for new devices, Claude API key or
+  proxy with a no-cost connection test, and a reset back to the demo data.
+
+There's no login in this demo: anyone who opens `admin.html` can change settings. A real deployment
+needs admin accounts on the camp server, along with the server-side storage described below.
 
 ## Metric and US units
 

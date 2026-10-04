@@ -42,7 +42,13 @@ function unitPrefs(){
   try { return JSON.parse(localStorage.getItem(UNIT_PREF_STORE)) || {}; }
   catch(e){ return {}; }
 }
-function unitPref(kind){ return unitPrefs()[kind] === "imperial" ? "imperial" : "metric"; }
+function unitPref(kind){
+  const own = unitPrefs()[kind];
+  if(own) return own === "imperial" ? "imperial" : "metric";
+  // No choice made on this device yet: use the admin's default.
+  const def = typeof db_getSettings === "function" ? db_getSettings().defaultUnits : "metric";
+  return def === "imperial" ? "imperial" : "metric";
+}
 function setUnitPref(kind, system){
   const prefs = unitPrefs();
   prefs[kind] = system;

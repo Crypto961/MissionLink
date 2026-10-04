@@ -70,6 +70,7 @@ a{color:var(--teal-dark);}
 .brand-text{display:flex; flex-direction:column; line-height:1.15;}
 .brand-text strong{font-size:15px;}
 .brand-text span{font-size:11.5px; color:var(--ink-soft);}
+.brand-text .mission-line{font-weight:600; color:var(--teal-dark);}
 
 .role-pill{
   display:inline-flex; align-items:center; gap:6px;
@@ -126,7 +127,7 @@ main.wide{max-width:1180px;}
 
 /* ---------- Forms ---------- */
 label{display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin:0 0 4px;}
-input[type=text], input[type=number], input[type=search], select, textarea{
+input[type=text], input[type=number], input[type=search], input[type=password], select, textarea{
   width:100%; padding:11px 12px; border:1px solid var(--line-strong);
   border-radius:9px; font-size:15px; font-family:inherit; background:#fff; color:var(--ink);
 }
@@ -298,6 +299,28 @@ button.queue-item:hover, button.match-card:hover{border-color:var(--line-strong)
 .id-chip{font-family:ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:var(--paper); padding:4px 8px; border-radius:6px;}
 
 footer.app-foot{max-width:980px; margin:30px auto 10px; padding:0 20px; color:var(--ink-soft); font-size:12px;}
+
+/* ---------- Admin ---------- */
+.admin-toc ul{list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:6px 16px;}
+.admin-toc a{display:inline-flex; align-items:center; min-height:32px; font-weight:600;}
+.section-head{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+.table-wrap{position:relative; overflow-x:auto; border:1px solid var(--line); border-radius:11px;}
+.data-table{width:100%; border-collapse:collapse; font-size:13.5px;}
+.data-table th{text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-soft); background:var(--paper); padding:9px 10px; border-bottom:1px solid var(--line);}
+.data-table td{padding:10px; border-bottom:1px solid var(--line); vertical-align:top;}
+.data-table tr:last-child td{border-bottom:0;}
+.data-table td.actions{white-space:nowrap; text-align:right;}
+.btn-sm{min-height:36px; padding:6px 12px; font-size:13px;}
+.danger-text{color:var(--danger);}
+.detail-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px 18px; margin:8px 0 0;}
+.detail-grid dt{font-size:12px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
+.detail-grid dd{margin:2px 0 0; font-size:14px;}
+.field-error{color:var(--danger); font-weight:600; margin:4px 0 0;}
+.check-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:2px 12px;}
+dialog.admin-dialog{max-width:640px; max-height:calc(100vh - 32px); overflow:auto;}
+section.card[id]{scroll-margin-top:80px;}
+.ai-panel .danger, .danger{border-left:4px solid var(--danger); background:var(--danger-pale); padding:8px 10px; border-radius:6px; margin:8px 0;}
+input[type=date], input[type=file]{width:100%; padding:10px 12px; border:1px solid var(--line-strong); border-radius:9px; font-size:15px; font-family:inherit; background:#fff; color:var(--ink);}
 
 /* ---------- Accessibility helpers ---------- */
 .visually-hidden{

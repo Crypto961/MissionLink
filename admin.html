@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin &amp; mission settings — MissionLink</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">ML</div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Admin &amp; mission settings</span></div>
+  </div>
+  <div class="header-actions">
+    <span class="role-pill role-runner"><span class="dot" aria-hidden="true"></span>Admin</span>
+    <nav aria-label="Roles"><a class="exit-link" href="index.html">Switch role</a></nav>
+  </div>
+</header>
+
+<main class="wide" id="main" tabindex="-1">
+  <h1 class="page-title">Admin &amp; mission settings</h1>
+
+  <nav aria-label="Admin sections" class="card admin-toc">
+    <ul>
+      <li><a href="#current">Current mission</a></li>
+      <li><a href="#missions">Missions</a></li>
+      <li><a href="#staff">Staff</a></li>
+      <li><a href="#pharmacy">Pharmacy inventory</a></li>
+      <li><a href="#patients">Patient data</a></li>
+      <li><a href="#settings">API keys &amp; settings</a></li>
+    </ul>
+  </nav>
+
+  <section class="card" id="current" aria-labelledby="currentHeading">
+    <h2 id="currentHeading">Current mission</h2>
+    <p class="small muted">Every station uses the current mission: its camp shows first at registration, its language drives speech capture, and its team appears in the on-duty lists.</p>
+    <div class="field" style="max-width:420px;">
+      <label for="activeMissionSelect">Mission running now</label>
+      <select id="activeMissionSelect"></select>
+    </div>
+    <div id="currentDetails"></div>
+  </section>
+
+  <section class="card" id="missions" aria-labelledby="missionsHeading">
+    <div class="section-head">
+      <h2 id="missionsHeading">Missions</h2>
+      <button type="button" class="btn btn-primary" id="btnNewMission">+ New mission</button>
+    </div>
+    <div id="missionTable"></div>
+  </section>
+
+  <section class="card" id="staff" aria-labelledby="staffHeading">
+    <div class="section-head">
+      <h2 id="staffHeading">Staff &amp; volunteers</h2>
+      <button type="button" class="btn btn-primary" id="btnNewStaff">+ Add person</button>
+    </div>
+    <div class="field-row">
+      <div class="field" style="max-width:300px;">
+        <label for="staffMissionFilter">Show team for</label>
+        <select id="staffMissionFilter"></select>
+      </div>
+      <div class="field" style="max-width:220px;">
+        <label for="staffRoleFilter">Role</label>
+        <select id="staffRoleFilter"></select>
+      </div>
+    </div>
+    <div id="staffTable"></div>
+  </section>
+
+  <section class="card" id="pharmacy" aria-labelledby="pharmacyHeading">
+    <div class="section-head">
+      <h2 id="pharmacyHeading">Pharmacy inventory</h2>
+      <button type="button" class="btn btn-primary" id="btnNewItem">+ Add item</button>
+    </div>
+    <p class="small muted">Stock goes down automatically as the pharmacist dispenses. Edit here to set opening stock, restock, or change the par level that triggers a "low" warning.</p>
+    <div id="inventoryTable"></div>
+  </section>
+
+  <section class="card" id="patients" aria-labelledby="patientsHeading">
+    <h2 id="patientsHeading">Patient data</h2>
+    <p class="small muted" id="patientStats"></p>
+
+    <h3 style="margin-top:12px;">Import from other or previous missions</h3>
+    <p class="small muted">CSV (one row per visit) or JSON (a MissionLink backup). Records with a pass ID that's already on file are merged into that patient's history; new visits are added, existing ones aren't duplicated. Temperatures, weights and heights may be in either metric or US units.</p>
+    <p class="small" style="color:var(--danger);"><strong>Real patient data:</strong> in this demo, imported records are stored only in this browser. Never upload real patient data to a public site or commit it to the repository.</p>
+    <form id="importForm" novalidate>
+      <div class="field">
+        <label for="importFile">Patient file (.csv or .json)</label>
+        <input type="file" id="importFile" accept=".csv,.json,text/csv,application/json" aria-describedby="importErr">
+        <p class="small" id="importErr" style="color:var(--danger); margin:4px 0 0;" hidden></p>
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-secondary">Preview import</button>
+        <button type="button" class="btn btn-ghost" id="btnTemplate">Download CSV template</button>
+      </div>
+    </form>
+    <div id="importPreview" aria-live="polite"></div>
+
+    <h3 style="margin-top:16px;">Backup</h3>
+    <p class="small muted">Downloads everything — missions, staff, inventory, settings and patients — as one JSON file that can be imported into another device's MissionLink.</p>
+    <button type="button" class="btn btn-secondary" id="btnBackup">Download backup</button>
+  </section>
+
+  <section class="card" id="settings" aria-labelledby="settingsHeading">
+    <h2 id="settingsHeading">API keys &amp; settings</h2>
+    <form id="settingsForm" novalidate>
+      <div class="field" style="max-width:420px;">
+        <label for="setOrg">Organization name</label>
+        <input type="text" id="setOrg" autocomplete="organization">
+      </div>
+      <fieldset>
+        <legend>Default units for new devices</legend>
+        <label class="check"><input type="radio" name="setUnits" value="metric"> Metric (°C, kg, cm)</label>
+        <label class="check"><input type="radio" name="setUnits" value="imperial"> US (°F, lb, in)</label>
+        <p class="small muted" style="margin:2px 0 0;">Each volunteer can still switch units on their own device.</p>
+      </fieldset>
+
+      <h3 style="margin-top:14px;">Claude API</h3>
+      <p class="small muted">Powers complaint summaries, translation and sorting at triage, and note tidying for physicians. Speech-to-text itself stays on each device.</p>
+      <div class="field" style="max-width:520px;">
+        <label for="setClaudeKey">Anthropic API key</label>
+        <input type="password" id="setClaudeKey" autocomplete="off" spellcheck="false" aria-describedby="setClaudeKeyHelp">
+        <p class="small muted" id="setClaudeKeyHelp" style="margin:4px 0 0;">Stored only in this browser, and needed on each device that uses Claude. Use a key with a spend limit and clear it after a demo.</p>
+      </div>
+      <div class="field" style="max-width:520px;">
+        <label for="setClaudeProxy">Proxy URL (production)</label>
+        <input type="text" id="setClaudeProxy" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-proxy.example.org" aria-describedby="setClaudeProxyHelp">
+        <p class="small muted" id="setClaudeProxyHelp" style="margin:4px 0 0;">A server that holds the key. With a proxy, leave the key empty — see README, "Claude API setup".</p>
+      </div>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">Save settings</button>
+        <button type="button" class="btn btn-secondary" id="btnTestClaude">Test Claude connection</button>
+      </div>
+      <p class="small" id="claudeTestResult" aria-live="polite" style="margin-top:8px;"></p>
+    </form>
+
+    <h3 style="margin-top:18px;">Demo data</h3>
+    <p class="small muted">Puts every mission, person, stock level and patient back to the demo's starting state. API keys and unit preferences aren't affected.</p>
+    <button type="button" class="btn btn-danger" id="btnReset">Reset demo data</button>
+  </section>
+</main>
+<footer class="app-foot">MissionLink · Admin · in this demo, all settings and data live in this browser</footer>
+
+<script src="js/data.js"></script>
+<script src="js/db.js"></script>
+<script src="js/units.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/claude.js"></script>
+<script src="js/importer.js"></script>
+<script>
+db_seedIfEmpty();
+
+const today = new Date().toISOString().slice(0,10);
+function missionStatus(m){
+  if(m.endDate && m.endDate < today) return { label:"Completed", cls:"badge-slate" };
+  if(m.startDate && m.startDate > today) return { label:"Upcoming", cls:"badge-amber" };
+  return { label:"In progress", cls:"badge-teal" };
+}
+function missionLabel(m){ return `${m.camp}, ${m.country} · ${(m.startDate||"").slice(0,4)}`; }
+function fmtDate(d){
+  if(!d) return "—";
+  const dt = new Date(d + "T00:00:00");
+  return isNaN(dt) ? d : dt.toLocaleDateString(undefined, { day:"numeric", month:"short", year:"numeric" });
+}
+function roleLabel(key){ return (STAFF_ROLES.find(r => r.key === key) || {}).label || key; }
+
+/* ---------- Generic edit dialog ----------
+   fields: [{ name, label, type, required, options, help, min, readonly, hint }]
+   type: text | date | number | textarea | select | checkboxes | datalist */
+function editDialog({ title, fields, values, submitLabel, validate, onSave }){
+  const dlg = document.createElement("dialog");
+  dlg.className = "card admin-dialog";
+  const tid = "dlg" + Math.random().toString(36).slice(2,7);
+  dlg.setAttribute("aria-labelledby", tid + "-title");
+  const ctl = (f) => {
+    const id = `${tid}-${f.name}`, v = values[f.name] ?? "";
+    const req = f.required ? ' required aria-required="true"' : "";
+    const desc = `aria-describedby="${id}-err${f.help ? " " + id + "-help" : ""}"`;
+    const help = f.help ? `<p class="small muted" id="${id}-help" style="margin:4px 0 0;">${f.help}</p>` : "";
+    const err = `<p class="small field-error" id="${id}-err" hidden></p>`;
+    const star = f.required ? ' <span aria-hidden="true">*</span>' : "";
+    if(f.type === "checkboxes"){
+      return `<fieldset data-name="${f.name}" ${desc}><legend>${f.label}</legend>
+        <div class="check-grid">${f.options.map(o => `<label class="check"><input type="checkbox" name="${f.name}" value="${esc(o.value)}" ${(v||[]).includes(o.value) ? "checked" : ""}> ${esc(o.label)}</label>`).join("")}</div>${help}${err}</fieldset>`;
+    }
+    let input;
+    if(f.type === "select") input = `<select id="${id}" name="${f.name}"${req} ${desc}>${f.options.map(o => `<option value="${esc(o.value)}" ${String(o.value) === String(v) ? "selected" : ""}>${esc(o.label)}</option>`).join("")}</select>`;
+    else if(f.type === "textarea") input = `<textarea id="${id}" name="${f.name}" ${desc}>${esc(v)}</textarea>`;
+    else {
+      const list = f.type === "datalist" ? ` list="${id}-list"` : "";
+      const type = f.type === "datalist" ? "text" : f.type || "text";
+      input = `<input type="${type}" id="${id}" name="${f.name}" value="${esc(v)}"${req}${list} ${desc}${f.min !== undefined ? ` min="${f.min}"` : ""}${f.type === "number" ? ' inputmode="decimal"' : ""}${f.readonly ? " readonly" : ""} autocomplete="off">`;
+      if(f.type === "datalist") input += `<datalist id="${id}-list">${f.options.map(o => `<option value="${esc(o)}"></option>`).join("")}</datalist>`;
+    }
+    return `<div class="field"><label for="${id}">${f.label}${star}</label>${input}${help}${err}</div>`;
+  };
+  dlg.innerHTML = `<form method="dialog" novalidate>
+    <h2 id="${tid}-title">${esc(title)}</h2>
+    <p class="small muted">Fields marked <span aria-hidden="true">*</span><span class="visually-hidden">with an asterisk</span> are required.</p>
+    ${fields.map(ctl).join("")}
+    <div class="btn-row" style="margin-top:6px;">
+      <button type="submit" class="btn btn-primary" value="save">${esc(submitLabel || "Save")}</button>
+      <button type="button" class="btn btn-secondary" data-cancel>Cancel</button>
+    </div></form>`;
+  document.body.appendChild(dlg);
+  const form = dlg.querySelector("form");
+  const opener = document.activeElement;
+
+  function readValues(){
+    const out = {};
+    fields.forEach(f => {
+      if(f.type === "checkboxes") out[f.name] = [...form.querySelectorAll(`input[name="${f.name}"]:checked`)].map(c => c.value);
+      else { const el = form.elements[f.name]; out[f.name] = f.type === "number" ? el.value.trim().replace(",", ".") : el.value.trim(); }
+    });
+    return out;
+  }
+  function showErrors(errors){
+    let first = null;
+    fields.forEach(f => {
+      const id = `${tid}-${f.name}`, msg = errors[f.name];
+      const errEl = dlg.querySelector(`#${id}-err`);
+      errEl.hidden = !msg; errEl.textContent = msg || "";
+      const ctlEl = f.type === "checkboxes" ? dlg.querySelector(`fieldset[data-name="${f.name}"] input`) : dlg.querySelector(`#${id}`);
+      if(f.type !== "checkboxes"){ if(msg) ctlEl.setAttribute("aria-invalid","true"); else ctlEl.removeAttribute("aria-invalid"); }
+      if(msg && !first) first = ctlEl;
+    });
+    if(first) first.focus();
+    return !first;
+  }
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const vals = readValues();
+    const errors = {};
+    fields.forEach(f => {
+      const v = vals[f.name];
+      if(f.required && (Array.isArray(v) ? !v.length : !v)) errors[f.name] = `${f.label} is required.`;
+      else if(f.type === "number" && v !== "" && (isNaN(Number(v)) || (f.min !== undefined && Number(v) < f.min))) errors[f.name] = `${f.label} must be a number${f.min !== undefined ? " of " + f.min + " or more" : ""}.`;
+    });
+    Object.assign(errors, validate ? validate(vals) || {} : {});
+    if(!showErrors(errors)) return;
+    onSave(vals);
+    dlg.close();
+  });
+  dlg.querySelector("[data-cancel]").addEventListener("click", () => dlg.close());
+  dlg.addEventListener("close", () => { dlg.remove(); if(opener && document.contains(opener)) opener.focus(); });
+  dlg.showModal();
+  const firstInput = dlg.querySelector("input:not([readonly]), select, textarea");
+  if(firstInput) firstInput.focus();
+}
+
+/* Tables scroll sideways inside their own focusable region on narrow
+   screens, so the page itself never does. */
+function tableHtml(caption, headers, rows){
+  return `<div class="table-wrap" role="region" aria-label="${esc(caption)} table" tabindex="0">
+    <table class="data-table"><caption class="visually-hidden">${esc(caption)}</caption>
+    <thead><tr>${headers.map(h => `<th scope="col">${h}</th>`).join("")}</tr></thead>
+    <tbody>${rows.join("")}</tbody></table></div>`;
+}
+
+/* ---------- Current mission ---------- */
+function renderCurrent(){
+  const missions = db_getMissions();
+  const active = activeMission();
+  qs("#activeMissionSelect").innerHTML = missions.map(m => `<option value="${esc(m.id)}" ${active && m.id === active.id ? "selected" : ""}>${esc(missionLabel(m))} — ${missionStatus(m).label}</option>`).join("");
+  if(!active){ qs("#currentDetails").innerHTML = `<p class="muted">No missions yet — create one below.</p>`; return; }
+  const team = db_getStaff().filter(s => s.missionIds.includes(active.id));
+  const count = r => team.filter(s => s.role === r).length;
+  qs("#currentDetails").innerHTML = `<dl class="detail-grid">
+    <div><dt>Camp</dt><dd>${esc(active.camp)}, ${esc(active.country)}</dd></div>
+    <div><dt>Location</dt><dd>${esc(active.location || "—")}</dd></div>
+    <div><dt>Dates</dt><dd>${fmtDate(active.startDate)} – ${fmtDate(active.endDate)}</dd></div>
+    <div><dt>Daily hours</dt><dd>${esc(active.dailyHours || "—")}</dd></div>
+    <div><dt>Language</dt><dd>${esc(active.language)}</dd></div>
+    <div><dt>Team</dt><dd>${count("physician")} physicians · ${count("nurse")} nurses · ${count("pharmacist")} pharmacists · ${team.length} people in all</dd></div>
+    </dl>${active.notes ? `<p class="small" style="margin-top:8px;"><strong>Notes:</strong> ${esc(active.notes)}</p>` : ""}`;
+}
+qs("#activeMissionSelect").addEventListener("change", (e) => {
+  db_saveSettings({ activeMissionId: e.target.value });
+  renderAll();
+  toast("Current mission: " + missionLabel(db_getMission(e.target.value)));
+});
+
+/* ---------- Missions ---------- */
+function renderMissions(){
+  const active = activeMission();
+  const missions = db_getMissions();
+  qs("#missionTable").innerHTML = missions.length ? tableHtml("Missions", ["Camp","Dates","Daily hours","Language","Status","<span class=\"visually-hidden\">Actions</span>"],
+    missions.map(m => {
+      const st = missionStatus(m);
+      return `<tr>
+        <td><strong>${esc(m.camp)}</strong><br><span class="small muted">${esc(m.country)} (${esc(m.code)}) · ${esc(m.location || "")}</span>
+          ${active && active.id === m.id ? '<br><span class="badge badge-teal">Current mission</span>' : ""}</td>
+        <td>${fmtDate(m.startDate)} –<br>${fmtDate(m.endDate)}</td>
+        <td>${esc(m.dailyHours || "—")}</td>
+        <td>${esc(m.language)}</td>
+        <td><span class="badge ${st.cls}">${st.label}</span></td>
+        <td class="actions">
+          <button type="button" class="btn btn-secondary btn-sm" data-edit-mission="${esc(m.id)}">Edit<span class="visually-hidden"> ${esc(missionLabel(m))}</span></button>
+          ${active && active.id === m.id ? "" : `<button type="button" class="btn btn-ghost btn-sm" data-activate="${esc(m.id)}">Make current<span class="visually-hidden">: ${esc(missionLabel(m))}</span></button>`}
+          <button type="button" class="btn btn-ghost btn-sm danger-text" data-delete-mission="${esc(m.id)}">Delete<span class="visually-hidden"> ${esc(missionLabel(m))}</span></button>
+        </td></tr>`;
+    })) : `<p class="muted">No missions yet.</p>`;
+  qsa("[data-edit-mission]").forEach(b => b.addEventListener("click", () => missionDialog(db_getMission(b.dataset.editMission))));
+  qsa("[data-activate]").forEach(b => b.addEventListener("click", () => {
+    db_saveSettings({ activeMissionId: b.dataset.activate });
+    renderAll();
+    toast("Current mission: " + missionLabel(db_getMission(b.dataset.activate)));
+    focusEl(qs("#missionsHeading"));
+  }));
+  qsa("[data-delete-mission]").forEach(b => b.addEventListener("click", () => {
+    const m = db_getMission(b.dataset.deleteMission);
+    if(!confirm(`Delete the mission "${missionLabel(m)}"? Patient records are kept; staff are unassigned from it.`)) return;
+    db_deleteMission(m.id);
+    renderAll();
+    toast("Mission deleted");
+    focusEl(qs("#missionsHeading"));
+  }));
+}
+
+function missionDialog(m){
+  const isNew = !m;
+  const missions = db_getMissions();
+  m = m || { code:"", country:"", camp:"", location:"", language:"English", startDate:"", endDate:"", dailyHours:"08:00–17:00", notes:"" };
+  const fields = [
+    { name:"country", label:"Country", required:true },
+    { name:"code", label:"Country code", required:true, help:"2–3 letters, used in pass IDs (e.g. KE → ML-KE-0001). Reuse the same code for every mission in a country so patients' history follows them." },
+    { name:"camp", label:"Camp name", required:true },
+    { name:"location", label:"Location", help:"Town, district or site." },
+    { name:"language", label:"Main patient language", type:"datalist", options: MISSION_LANGUAGES, required:true, help:"Sets the speech-recognition language at triage." },
+    { name:"startDate", label:"Start date", type:"date", required:true },
+    { name:"endDate", label:"End date", type:"date", required:true },
+    { name:"dailyHours", label:"Daily hours", help:"e.g. 08:00–17:00" },
+    { name:"notes", label:"Notes", type:"textarea" }
+  ];
+  if(isNew && missions.length) fields.push({ name:"copyTeamFrom", label:"Copy team from", type:"select",
+    options:[{ value:"", label:"Don't copy — add people later" }, ...missions.map(x => ({ value:x.id, label:missionLabel(x) }))],
+    help:"Assigns everyone from an earlier mission to this one. You can change the team afterwards." });
+  editDialog({
+    title: isNew ? "New mission" : `Edit mission: ${missionLabel(m)}`,
+    fields, values: { ...m, copyTeamFrom:"" },
+    submitLabel: isNew ? "Create mission" : "Save changes",
+    validate: (v) => {
+      const e = {};
+      if(v.code && !/^[A-Za-z]{2,3}$/.test(v.code)) e.code = "Use 2 or 3 letters.";
+      if(v.startDate && v.endDate && v.endDate < v.startDate) e.endDate = "End date must be on or after the start date.";
+      return e;
+    },
+    onSave: (v) => {
+      const code = v.code.toUpperCase();
+      let id = m.id;
+      if(isNew){
+        const base = `${code}-${v.startDate.slice(0,4)}`;
+        id = base; let n = 2;
+        while(db_getMission(id)) id = `${base}-${n++}`;
+      }
+      db_saveMission({ id, code, country:v.country, camp:v.camp, location:v.location, language:v.language,
+        startDate:v.startDate, endDate:v.endDate, dailyHours:v.dailyHours, notes:v.notes });
+      if(isNew && v.copyTeamFrom){
+        db_getStaff().filter(s => s.missionIds.includes(v.copyTeamFrom)).forEach(s => db_saveStaff({ ...s, missionIds:[...s.missionIds, id] }));
+      }
+      if(isNew && !db_getSettings().activeMissionId) db_saveSettings({ activeMissionId:id });
+      renderAll();
+      toast(isNew ? `Mission created: ${v.camp}. Use "Make current" when it starts.` : "Mission saved");
+    }
+  });
+}
+qs("#btnNewMission").addEventListener("click", () => missionDialog(null));
+
+/* ---------- Staff ---------- */
+let staffFilterReady = false;
+function renderStaffFilters(){
+  const mSel = qs("#staffMissionFilter"), rSel = qs("#staffRoleFilter");
+  const keepM = mSel.value, keepR = rSel.value;
+  mSel.innerHTML = `<option value="">Everyone</option>` + db_getMissions().map(m => `<option value="${esc(m.id)}">${esc(missionLabel(m))}</option>`).join("");
+  rSel.innerHTML = `<option value="">All roles</option>` + STAFF_ROLES.map(r => `<option value="${r.key}">${r.label}</option>`).join("");
+  // First visit shows the current mission's team; after that, keep the admin's choice.
+  const active = activeMission();
+  const wantM = staffFilterReady ? keepM : (active ? active.id : "");
+  mSel.value = [...mSel.options].some(o => o.value === wantM) ? wantM : "";
+  rSel.value = keepR || "";
+  staffFilterReady = true;
+}
+["#staffMissionFilter","#staffRoleFilter"].forEach(sel => qs(sel).addEventListener("change", renderStaff));
+
+function renderStaff(){
+  const mId = qs("#staffMissionFilter").value, role = qs("#staffRoleFilter").value;
+  const people = db_getStaff().filter(s => (!mId || s.missionIds.includes(mId)) && (!role || s.role === role))
+    .sort((a,b) => STAFF_ROLES.findIndex(r => r.key === a.role) - STAFF_ROLES.findIndex(r => r.key === b.role) || a.name.localeCompare(b.name));
+  const missionNames = ids => ids.map(id => { const m = db_getMission(id); return m ? `${m.camp} ${m.startDate.slice(0,4)}` : null; }).filter(Boolean).join(", ") || "—";
+  qs("#staffTable").innerHTML = people.length ? tableHtml("Staff and volunteers", ["Name","Role","Specialty","Languages","Home country","Missions","<span class=\"visually-hidden\">Actions</span>"],
+    people.map(s => `<tr>
+      <td><strong>${esc(s.name)}</strong></td><td>${esc(roleLabel(s.role))}</td><td>${esc(s.specialty || "—")}</td>
+      <td>${esc(s.languages || "—")}</td><td>${esc(s.homeCountry || "—")}</td><td class="small">${esc(missionNames(s.missionIds))}</td>
+      <td class="actions">
+        <button type="button" class="btn btn-secondary btn-sm" data-edit-staff="${esc(s.id)}">Edit<span class="visually-hidden"> ${esc(s.name)}</span></button>
+        <button type="button" class="btn btn-ghost btn-sm danger-text" data-delete-staff="${esc(s.id)}">Remove<span class="visually-hidden"> ${esc(s.name)}</span></button>
+      </td></tr>`)) : `<p class="muted">No one matches — change the filters or add a person.</p>`;
+  qsa("[data-edit-staff]").forEach(b => b.addEventListener("click", () => staffDialog(db_getStaff().find(s => s.id === b.dataset.editStaff))));
+  qsa("[data-delete-staff]").forEach(b => b.addEventListener("click", () => {
+    const s = db_getStaff().find(x => x.id === b.dataset.deleteStaff);
+    if(!confirm(`Remove ${s.name} from the roster? Visits they recorded keep their name.`)) return;
+    db_deleteStaff(s.id);
+    renderAll();
+    toast(`${s.name} removed`);
+    focusEl(qs("#staffHeading"));
+  }));
+}
+
+function staffDialog(s){
+  const isNew = !s;
+  const active = activeMission();
+  s = s || { name:"", role:"physician", specialty:"", languages:"", homeCountry:"", missionIds: active ? [active.id] : [] };
+  editDialog({
+    title: isNew ? "Add a person" : `Edit: ${s.name}`,
+    fields: [
+      { name:"name", label:"Full name", required:true, help:"Include a title if you like, e.g. Dr. or RN." },
+      { name:"role", label:"Role", type:"select", required:true, options: STAFF_ROLES.map(r => ({ value:r.key, label:r.label })) },
+      { name:"specialty", label:"Specialty", help:"e.g. Pediatrics, Triage, Midwifery." },
+      { name:"languages", label:"Languages spoken", help:"Separate with commas." },
+      { name:"homeCountry", label:"Home country" },
+      { name:"missionIds", label:"Missions", type:"checkboxes", options: db_getMissions().map(m => ({ value:m.id, label:missionLabel(m) })) }
+    ],
+    values: s,
+    submitLabel: isNew ? "Add person" : "Save changes",
+    onSave: (v) => {
+      const id = s.id || nextId("S-", db_getStaff().map(x => x.id));
+      db_saveStaff({ id, ...v });
+      renderAll();
+      toast(isNew ? `${v.name} added` : "Saved");
+    }
+  });
+}
+qs("#btnNewStaff").addEventListener("click", () => staffDialog(null));
+
+/* ---------- Inventory ---------- */
+function renderInventory(){
+  const items = db_getInventory();
+  qs("#inventoryTable").innerHTML = items.length ? tableHtml("Pharmacy inventory", ["Item","Code","On hand","Par level","Status","<span class=\"visually-hidden\">Actions</span>"],
+    items.map(i => {
+      const low = i.onHand <= i.parLevel;
+      return `<tr><td><strong>${esc(i.name)}</strong></td><td class="small">${esc(i.sku)}</td>
+        <td>${i.onHand} ${esc(i.unit)}</td><td>${i.parLevel}</td>
+        <td>${low ? '<span class="badge badge-danger">Low</span>' : '<span class="badge badge-teal">OK</span>'}</td>
+        <td class="actions">
+          <button type="button" class="btn btn-secondary btn-sm" data-edit-item="${esc(i.sku)}">Edit<span class="visually-hidden"> ${esc(i.name)}</span></button>
+          <button type="button" class="btn btn-ghost btn-sm danger-text" data-delete-item="${esc(i.sku)}">Remove<span class="visually-hidden"> ${esc(i.name)}</span></button>
+        </td></tr>`;
+    })) : `<p class="muted">No items yet.</p>`;
+  qsa("[data-edit-item]").forEach(b => b.addEventListener("click", () => itemDialog(db_getInventory().find(i => i.sku === b.dataset.editItem))));
+  qsa("[data-delete-item]").forEach(b => b.addEventListener("click", () => {
+    const i = db_getInventory().find(x => x.sku === b.dataset.deleteItem);
+    if(!confirm(`Remove ${i.name} from the inventory? Past prescriptions keep their record.`)) return;
+    db_deleteInventoryItem(i.sku);
+    renderAll();
+    toast(`${i.name} removed`);
+    focusEl(qs("#pharmacyHeading"));
+  }));
+}
+
+function itemDialog(item){
+  const isNew = !item;
+  item = item || { sku:"", name:"", unit:"tablets", onHand:"", parLevel:"" };
+  editDialog({
+    title: isNew ? "Add inventory item" : `Edit: ${item.name}`,
+    fields: [
+      { name:"name", label:"Item name", required:true, help:"Include strength, e.g. Paracetamol 500mg." },
+      { name:"sku", label:"Code", required:true, readonly:!isNew, help: isNew ? "Short unique code, e.g. PARA-500. Can't be changed later." : "Codes can't be changed." },
+      { name:"unit", label:"Unit", type:"datalist", required:true, options:["tablets","capsules","sachets","vials","tubes","bottles","packs","boxes","courses","doses"] },
+      { name:"onHand", label:"On hand", type:"number", min:0, required:true },
+      { name:"parLevel", label:"Par level (warn at or below)", type:"number", min:0, required:true }
+    ],
+    values: item,
+    submitLabel: isNew ? "Add item" : "Save changes",
+    validate: (v) => isNew && db_getInventory().some(i => i.sku.toLowerCase() === v.sku.toLowerCase()) ? { sku:"That code is already used." } : {},
+    onSave: (v) => {
+      db_saveInventoryItem({ sku: isNew ? v.sku.toUpperCase() : item.sku, name:v.name, unit:v.unit, onHand:Math.round(Number(v.onHand)), parLevel:Math.round(Number(v.parLevel)) });
+      renderAll();
+      toast(isNew ? `${v.name} added` : "Stock saved");
+    }
+  });
+}
+qs("#btnNewItem").addEventListener("click", () => itemDialog(null));
+
+/* ---------- Patient data ---------- */
+function renderPatientStats(){
+  const pts = db_getPatients();
+  const visits = pts.reduce((n,p) => n + p.visits.length, 0);
+  const byCountry = {};
+  pts.forEach(p => byCountry[p.country] = (byCountry[p.country]||0) + 1);
+  qs("#patientStats").textContent = `${pts.length} patients and ${visits} visits on file: ` +
+    Object.entries(byCountry).map(([c,n]) => `${missionForCode(c).country} ${n}`).join(", ") + ".";
+}
+
+let pendingImport = null;
+qs("#importForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = qs("#importFile"), err = qs("#importErr");
+  const file = input.files[0];
+  err.hidden = true; input.removeAttribute("aria-invalid");
+  qs("#importPreview").innerHTML = "";
+  pendingImport = null;
+  const fail = (msg) => { err.textContent = msg; err.hidden = false; input.setAttribute("aria-invalid","true"); input.focus(); };
+  if(!file) return fail("Choose a .csv or .json file first.");
+  if(file.size > 5 * 1024 * 1024) return fail("That file is over 5 MB — split it into smaller files.");
+  try {
+    const plan = prepareImport(file.name, await file.text());
+    if(!plan.patients.length) return fail(plan.alreadyOnFile ? "Everything in this file is already on file — nothing to import." : "No usable patient records found. " + (plan.warnings[0] || ""));
+    pendingImport = plan;
+    qs("#importPreview").innerHTML = `<div class="ai-panel" style="margin-top:12px;">
+      <h3 id="previewHeading" tabindex="-1" style="font-size:15px;">Ready to import “${esc(file.name)}”</h3>
+      <ul class="small" style="margin:6px 0; padding-left:20px;">
+        <li>${plan.newPatients} new ${plan.newPatients === 1 ? "patient" : "patients"}</li>
+        <li>${plan.mergedPatients} existing ${plan.mergedPatients === 1 ? "patient" : "patients"} matched by pass ID — new visits added to their history</li>
+        <li>${plan.newVisits} visits in all</li>
+        ${plan.alreadyOnFile ? `<li>${plan.alreadyOnFile} ${plan.alreadyOnFile === 1 ? "record is" : "records are"} already on file exactly as in this file — skipped</li>` : ""}
+      </ul>
+      ${plan.possibleDuplicates.length ? `<div class="danger small" role="note"><strong>Check these possible duplicates:</strong><ul style="margin:4px 0 0; padding-left:20px;">${plan.possibleDuplicates.map(d => `<li>${esc(d)}</li>`).join("")}</ul></div>` : ""}
+      ${plan.warnings.length ? `<details class="small" style="margin:6px 0;"><summary>${plan.warnings.length} ${plan.warnings.length === 1 ? "note" : "notes"} about this file</summary><ul style="margin:4px 0 0; padding-left:20px;">${plan.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></details>` : ""}
+      ${tableHtml("Preview of the first records", ["Pass ID","Name","Sex","Age","Country","Visits"], plan.patients.slice(0,8).map(p => `<tr><td>${esc(p.id || "new ID")}</td><td>${esc(p.name)}</td><td>${esc(p.sex || "—")}</td><td>${p.approxAge || "—"}</td><td>${esc(p.country)}</td><td>${p.visits.length}</td></tr>`))}
+      ${plan.patients.length > 8 ? `<p class="small muted">…and ${plan.patients.length - 8} more.</p>` : ""}
+      <div class="btn-row" style="margin-top:8px;">
+        <button type="button" class="btn btn-primary" id="btnCommitImport">Import ${plan.patients.length} ${plan.patients.length === 1 ? "record" : "records"}</button>
+        <button type="button" class="btn btn-secondary" id="btnCancelImport">Cancel</button>
+      </div></div>`;
+    focusEl(qs("#previewHeading"));
+    qs("#btnCommitImport").addEventListener("click", () => {
+      const res = commitImport(pendingImport);
+      pendingImport = null;
+      input.value = "";
+      qs("#importPreview").innerHTML = `<p class="small" style="margin-top:10px;"><strong>Imported:</strong> ${res.added} new patients, ${res.merged} existing patients updated, ${res.visits} visits added.</p>`;
+      renderAll();
+      toast("Import complete");
+      focusEl(qs("#patientsHeading"));
+    });
+    qs("#btnCancelImport").addEventListener("click", () => {
+      pendingImport = null;
+      qs("#importPreview").innerHTML = "";
+      input.focus();
+    });
+  } catch(ex){
+    fail(ex.message || "Couldn't read that file.");
+  }
+});
+qs("#btnTemplate").addEventListener("click", () => downloadFile("missionlink-patients-template.csv", csvTemplate(), "text/csv"));
+qs("#btnBackup").addEventListener("click", () => {
+  downloadFile(`missionlink-backup-${today}.json`, backupJson(), "application/json");
+  toast("Backup downloaded");
+});
+
+/* ---------- Settings ---------- */
+function renderSettings(){
+  const s = db_getSettings();
+  qs("#setOrg").value = s.organization || "";
+  qsa('input[name="setUnits"]').forEach(r => r.checked = r.value === (s.defaultUnits || "metric"));
+  const c = claudeSettings();
+  qs("#setClaudeKey").value = c.apiKey;
+  qs("#setClaudeProxy").value = c.baseURL;
+}
+qs("#settingsForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  db_saveSettings({ organization: qs("#setOrg").value.trim(), defaultUnits: (qs('input[name="setUnits"]:checked') || {}).value || "metric" });
+  try {
+    const key = qs("#setClaudeKey").value.trim(), proxy = qs("#setClaudeProxy").value.trim();
+    if(key) localStorage.setItem(CLAUDE_KEY_STORE, key); else localStorage.removeItem(CLAUDE_KEY_STORE);
+    if(proxy) localStorage.setItem(CLAUDE_PROXY_STORE, proxy); else localStorage.removeItem(CLAUDE_PROXY_STORE);
+  } catch(err){ toast("This browser blocked saving the API key."); return; }
+  qsa("[data-claude-settings]").forEach(b => b.textContent = claudeStatusLabel());
+  toast("Settings saved");
+});
+qs("#btnTestClaude").addEventListener("click", async () => {
+  const out = qs("#claudeTestResult"), btn = qs("#btnTestClaude");
+  const key = qs("#setClaudeKey").value.trim(), proxy = qs("#setClaudeProxy").value.trim();
+  if(!key && !proxy){ out.textContent = "Enter an API key or a proxy URL first."; out.style.color = "var(--danger)"; return; }
+  btn.disabled = true; out.style.color = ""; out.textContent = "Checking…";
+  try {
+    await claudeTestConnection({ apiKey:key, baseURL:proxy });
+    out.style.color = "var(--teal-dark)";
+    out.textContent = "Connected — Claude is ready. Remember to save.";
+  } catch(err){
+    out.style.color = "var(--danger)";
+    out.textContent = err.message;
+  } finally { btn.disabled = false; }
+});
+qs("#btnReset").addEventListener("click", () => {
+  if(!confirm("Reset all missions, staff, inventory and patients to the demo's starting data? Anything you've added or imported on this device will be lost — download a backup first if you need it.")) return;
+  db_resetDemo();
+  renderAll();
+  toast("Demo data reset");
+  focusEl(qs("#settingsHeading"));
+});
+
+function renderAll(){
+  renderCurrent();
+  renderMissions();
+  renderStaffFilters();
+  renderStaff();
+  renderInventory();
+  renderPatientStats();
+}
+renderAll();
+renderSettings();
+</script>
+</body>
+</html>

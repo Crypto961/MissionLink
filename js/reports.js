@@ -7,7 +7,7 @@ function reportSummary(){
   const allVisits = patients.flatMap(p => p.visits.map(v => ({...v, patientId:p.id, country:p.country})));
 
   const byCountry = {};
-  MISSIONS.forEach(m => byCountry[m.code] = 0);
+  db_getMissions().forEach(m => byCountry[m.code] = 0);
   allVisits.forEach(v => { byCountry[v.country] = (byCountry[v.country]||0) + 1; });
 
   const byCategory = {};

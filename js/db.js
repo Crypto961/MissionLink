@@ -10,21 +10,43 @@
 
 const DB_KEY = "missionlink_db_v1";
 
-function db_seedIfEmpty(){
-  if(localStorage.getItem(DB_KEY)) return;
-  const state = {
-    patients: PATIENTS_SEED,
-    queue: QUEUE_SEED,
+function db_seedState(){
+  return {
+    patients: JSON.parse(JSON.stringify(PATIENTS_SEED)),
+    queue: JSON.parse(JSON.stringify(QUEUE_SEED)),
     inventory: INVENTORY_SEED.map(i => ({...i})),
     dispenseLog: [],
+    missions: MISSIONS.map(m => ({...m})),
+    staff: STAFF_SEED.map(s => ({...s, missionIds:[...s.missionIds]})),
+    settings: {...SETTINGS_SEED},
     createdAt: new Date().toISOString()
   };
-  localStorage.setItem(DB_KEY, JSON.stringify(state));
+}
+
+function db_seedIfEmpty(){
+  if(localStorage.getItem(DB_KEY)) return;
+  localStorage.setItem(DB_KEY, JSON.stringify(db_seedState()));
+}
+
+/* Browsers that opened an earlier version of the demo have state without
+   missions, staff or settings; fill those in from the seed, keep the rest. */
+function db_upgrade(state){
+  let changed = false;
+  if(!Array.isArray(state.missions)){ state.missions = MISSIONS.map(m => ({...m})); changed = true; }
+  if(!Array.isArray(state.staff)){ state.staff = STAFF_SEED.map(s => ({...s, missionIds:[...s.missionIds]})); changed = true; }
+  if(!state.settings){ state.settings = {...SETTINGS_SEED}; changed = true; }
+  return changed;
 }
 
 function db_read(){
   db_seedIfEmpty();
-  return JSON.parse(localStorage.getItem(DB_KEY));
+  const state = JSON.parse(localStorage.getItem(DB_KEY));
+  if(db_upgrade(state)) db_write(state);
+  return state;
+}
+
+function db_resetDemo(){
+  localStorage.setItem(DB_KEY, JSON.stringify(db_seedState()));
 }
 
 function db_write(state){
@@ -133,8 +155,88 @@ function db_restock(sku, qty){
 }
 
 /* ---------- Helpers shared across pages ---------- */
+/* ---------- Missions, staff, settings (managed on the Admin page) ---------- */
+function db_getMissions(){
+  return db_read().missions.slice().sort((a,b) => (b.startDate||"").localeCompare(a.startDate||""));
+}
+function db_getMission(id){
+  return db_read().missions.find(m => m.id === id) || null;
+}
+function db_saveMission(mission){
+  const state = db_read();
+  const idx = state.missions.findIndex(m => m.id === mission.id);
+  if(idx === -1) state.missions.push(mission); else state.missions[idx] = mission;
+  db_write(state);
+  return mission;
+}
+function db_deleteMission(id){
+  const state = db_read();
+  state.missions = state.missions.filter(m => m.id !== id);
+  state.staff.forEach(s => s.missionIds = s.missionIds.filter(x => x !== id));
+  if(state.settings.activeMissionId === id) state.settings.activeMissionId = (state.missions[0] || {}).id || "";
+  db_write(state);
+}
+
+function db_getSettings(){ return db_read().settings; }
+function db_saveSettings(patch){
+  const state = db_read();
+  state.settings = { ...state.settings, ...patch };
+  db_write(state);
+  return state.settings;
+}
+function activeMission(){
+  const s = db_getSettings();
+  return db_getMission(s.activeMissionId) || db_getMissions()[0] || null;
+}
+
+function db_getStaff(){ return db_read().staff; }
+function db_saveStaff(person){
+  const state = db_read();
+  const idx = state.staff.findIndex(s => s.id === person.id);
+  if(idx === -1) state.staff.push(person); else state.staff[idx] = person;
+  db_write(state);
+  return person;
+}
+function db_deleteStaff(id){
+  const state = db_read();
+  state.staff = state.staff.filter(s => s.id !== id);
+  db_write(state);
+}
+/* Staff of a given role working the active mission, for on-duty pickers. */
+function staffOnMission(role){
+  const m = activeMission();
+  return db_getStaff().filter(s => s.role === role && (!m || s.missionIds.includes(m.id)));
+}
+function staffName(id){
+  const s = db_getStaff().find(x => x.id === id);
+  return s ? s.name : "";
+}
+
+function db_saveInventoryItem(item){
+  const state = db_read();
+  const idx = state.inventory.findIndex(i => i.sku === item.sku);
+  if(idx === -1) state.inventory.push(item); else state.inventory[idx] = item;
+  db_write(state);
+}
+function db_deleteInventoryItem(sku){
+  const state = db_read();
+  state.inventory = state.inventory.filter(i => i.sku !== sku);
+  db_write(state);
+}
+
+function nextId(prefix, existingIds){
+  let n = existingIds.length + 1;
+  const pad = v => `${prefix}${String(v).padStart(3,"0")}`;
+  while(existingIds.includes(pad(n))) n++;
+  return pad(n);
+}
+
+/* Country-level info for a patient's country code: the most recent mission
+   there. Never returns undefined, so imported records with an unknown code
+   still render. */
 function missionForCode(code){
-  return MISSIONS.find(m => m.code === code);
+  const matches = db_getMissions().filter(m => m.code === code);
+  return matches[0] || { id:"", code, country: code || "Unknown", camp:"—", language:"English", location:"" };
 }
 
 function categoryLabel(key){
@@ -228,3 +330,27 @@ function renderIfChanged(el, key, renderFn){
 function qs(sel, root=document){ return root.querySelector(sel); }
 function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 function param(name){ return new URLSearchParams(location.search).get(name); }
+
+/* Fills any [data-active-mission] element (role-page headers) with the
+   current mission, so every station shows which camp it's working. */
+function renderActiveMissionLine(){
+  const m = activeMission();
+  qsa("[data-active-mission]").forEach(el => {
+    el.textContent = m ? `${m.camp} · ${m.startDate.slice(0,4)}` : "No current mission — set one in Admin";
+  });
+}
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => { db_seedIfEmpty(); renderActiveMissionLine(); });
+else { db_seedIfEmpty(); renderActiveMissionLine(); }
+
+/* "Triaged by" / "Seen by" pickers: staff of one role on the current mission.
+   The choice is remembered per device, since one tablet usually stays with
+   one person for the day. */
+function setupOnDutyPicker(select, role, storeKey){
+  const people = staffOnMission(role);
+  select.innerHTML = `<option value="">Not recorded</option>` +
+    people.map(p => `<option value="${esc(p.id)}">${esc(p.name)}${p.specialty ? " — " + esc(p.specialty) : ""}</option>`).join("");
+  let saved = "";
+  try { saved = localStorage.getItem(storeKey) || ""; } catch(e){}
+  if(people.some(p => p.id === saved)) select.value = saved;
+  select.addEventListener("change", () => { try { localStorage.setItem(storeKey, select.value); } catch(e){} });
+}

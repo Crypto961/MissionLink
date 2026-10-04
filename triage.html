@@ -11,7 +11,7 @@
 <header class="app-header">
   <div class="brand">
     <div class="brand-mark" aria-hidden="true">ML</div>
-    <div class="brand-text"><strong>MissionLink</strong><span>Triage nurse</span></div>
+    <div class="brand-text"><strong>MissionLink</strong><span>Triage nurse · <span class="mission-line" data-active-mission></span></span></div>
   </div>
   <div class="header-actions">
     <span class="role-pill role-triage"><span class="dot" aria-hidden="true"></span>Triage</span>
@@ -122,6 +122,10 @@
     </div>
     <label class="check" for="markUrgent"><input type="checkbox" id="markUrgent"> Mark as urgent for the physician</label>
 
+    <div class="field" style="margin-top:12px; max-width:360px;">
+      <label for="triagedBy">Triaged by</label>
+      <select id="triagedBy"></select>
+    </div>
     <button type="button" class="btn btn-primary btn-block" id="btnSendToDoctor" style="margin-top:10px;">Send to physician queue</button>
   </section>
 
@@ -221,12 +225,19 @@ function renderAi(res){
 
 qs("#btnAnalyze").addEventListener("click", runClaude);
 
+// One option per country (missions in the same country share pass IDs),
+// labelled with that country's most recent camp; the current mission first.
 function fillCountrySelects(){
-  const opts = MISSIONS.map(m => `<option value="${m.code}">${m.country} — ${m.camp}</option>`).join("");
+  const seen = new Set(), current = activeMission();
+  const list = db_getMissions().filter(m => !seen.has(m.code) && seen.add(m.code));
+  if(current) list.sort((a,b) => (b.code === current.code) - (a.code === current.code));
+  const opts = list.map(m => `<option value="${esc(m.code)}">${esc(m.country)} — ${esc(m.camp)}</option>`).join("");
   qs("#npCountry").innerHTML = opts;
   qs("#searchCountry").innerHTML += opts;
+  if(current) qs("#npCountry").value = current.code;
 }
 fillCountrySelects();
+setupOnDutyPicker(qs("#triagedBy"), "nurse", "missionlink_triaged_by");
 
 function setNewCardOpen(open){
   qs("#newPatientCard").style.display = open ? "block" : "none";
@@ -368,7 +379,9 @@ qs("#btnSendToDoctor").addEventListener("click", () => {
     complaintEnglish: ai ? ai.english_summary : "",
     dangerSigns: ai ? ai.danger_signs : [],
     language: missionForCode(activePatient.country).language,
-    diagnosis: "", prescription: [], labOrdered: false, note: ""
+    diagnosis: "", prescription: [], labOrdered: false, note: "",
+    missionId: (activeMission() || {}).id || "",
+    triagedBy: qs("#triagedBy").value ? staffName(qs("#triagedBy").value) : ""
   };
   db_addVisit(activePatient.id, visit);
   db_moveToStation(activePatient.id, "physician");

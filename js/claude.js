@@ -164,6 +164,20 @@ Reply with the tidied note only.`,
   return claudeText(response);
 }
 
+/* Checks a key (or proxy) without spending tokens: looks up the model, which
+   needs a valid credential and confirms this account can use it. */
+async function claudeTestConnection({ apiKey, baseURL }){
+  const Anthropic = await claudeSdk();
+  const client = new Anthropic({ apiKey: apiKey || "proxy-held-key", baseURL: baseURL || undefined,
+    dangerouslyAllowBrowser: true, maxRetries: 1, timeout: 20_000 });
+  try {
+    return await client.models.retrieve(CLAUDE_MODEL);
+  } catch(err){
+    if(err instanceof Anthropic.NotFoundError) throw new Error(`The key works, but this account can't use ${CLAUDE_MODEL}.`);
+    throw new Error(claudeErrorMessage(err, Anthropic));
+  }
+}
+
 /* ---------- Settings dialog (shared by every page that loads this file) ---------- */
 function claudeStatusLabel(){
   return claudeConfigured() ? "Claude AI: on" : "Claude AI: set up";
