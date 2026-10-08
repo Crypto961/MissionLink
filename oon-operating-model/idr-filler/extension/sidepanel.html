@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IDR Bundle Filler</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <div class="brand">IDR Bundle Filler <span class="tag">Demo</span></div>
+    <div class="who" id="who">Not configured</div>
+  </header>
+
+  <div class="rule">You check every field and click Submit yourself. This tool never submits.</div>
+
+  <section id="setup" class="card hidden">
+    <h2>Connect to the bundle sheet</h2>
+    <p>Add the Apps Script web app URL, the API token and your name in Settings.</p>
+    <button id="open-options" class="primary">Open settings</button>
+  </section>
+
+  <section id="queue-view" class="hidden">
+    <div class="row-head">
+      <h2>Ready bundles</h2>
+      <button id="refresh" class="link">Refresh</button>
+    </div>
+    <div id="queue" class="list"></div>
+  </section>
+
+  <section id="bundle-view" class="hidden">
+    <button id="back" class="link">← All bundles</button>
+    <div class="card">
+      <div class="bundle-id" id="b-id"></div>
+      <div class="meta" id="b-meta"></div>
+      <div class="docs" id="b-docs"></div>
+    </div>
+
+    <div class="actions">
+      <button id="fill" class="primary">Fill this page</button>
+      <button id="verify" class="secondary">Check this page</button>
+      <button id="clear" class="ghost">Clear highlights</button>
+    </div>
+
+    <div id="summary" class="summary hidden"></div>
+    <div id="results" class="list"></div>
+
+    <details class="card">
+      <summary>Bundle values</summary>
+      <table id="values"></table>
+    </details>
+
+    <div class="card finish">
+      <h3>After you submit in the form</h3>
+      <label for="confirmation">Confirmation or dispute number</label>
+      <input id="confirmation" type="text" placeholder="e.g. DEMO-1A2B3C4D">
+      <button id="filed" class="success">Mark as filed</button>
+      <label for="reason">Problem with the bundle?</label>
+      <textarea id="reason" rows="2" placeholder="What needs fixing in Lebanon"></textarea>
+      <button id="return" class="danger">Return to Lebanon</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

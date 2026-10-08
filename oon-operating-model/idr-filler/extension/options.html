@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IDR Bundle Filler · Settings</title>
+  <link rel="stylesheet" href="sidepanel.css">
+  <style>
+    body { max-width: 560px; margin: 0 auto; }
+    main { padding: 16px; }
+    label { display: block; font-weight: 700; margin-top: 14px; }
+    input { width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid #C5D0DA; border-radius: 6px; font: inherit; }
+    .hint { color: #475569; font-size: 12px; margin-top: 4px; }
+    .primary { margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <header><div class="brand">IDR Bundle Filler · Settings</div></header>
+  <main>
+    <label for="apiUrl">Apps Script web app URL</label>
+    <input id="apiUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec">
+    <div class="hint">From Deploy &gt; Manage deployments in the Apps Script project. It ends in /exec.</div>
+
+    <label for="token">API token</label>
+    <input id="token" type="password" placeholder="Shown in the Apps Script log after running setup()">
+
+    <label for="operator">Your name</label>
+    <input id="operator" type="text" placeholder="Shown in the audit log">
+
+    <button id="save" class="primary">Save</button>
+    <div id="msg" class="hint"></div>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>
