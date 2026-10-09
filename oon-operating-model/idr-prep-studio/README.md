@@ -9,6 +9,7 @@ Nothing in this app connects to, or sends anything to, the CMS portal.
 | `Code.gs` | Server code: portal field schema, Sheet storage, Drive uploads, validation, confirmation PDF, US desk actions, `setup()` |
 | `Index.html` | The app: dispute list, the five entry pages, the summary, and the US copy desk |
 | `Pdf.html` | Layout of the confirmation PDF (the summary page) |
+| `DemoData.gs` | Optional. Synthetic demo disputes, view switching for demos, and cleanup |
 
 ## How it works
 
@@ -48,6 +49,39 @@ Nothing in this app connects to, or sends anything to, the CMS portal.
 8. Share the web app URL with the team. Everyone signs in with their Google Workspace account.
 
 When you change the code later, use **Deploy → Manage deployments → Edit → New version** so the same URL picks up the change.
+
+## Demo data
+
+Add `DemoData.gs` as a second script file (**+ → Script**, name it **DemoData**). Then run these from the editor's function menu:
+
+| Function | What it does |
+| --- | --- |
+| `seedDemoData` | Creates 10 synthetic disputes, `IDR-DEMO-001` to `IDR-DEMO-010`, with documents in Drive (about a minute). Running it again replaces them. |
+| `demoUseLebanonView` | Takes your account off the US desk, so you see the Lebanon entry screens |
+| `demoUseUsView` | Puts your account back on the US desk, so Ready disputes open in the copy desk |
+| `clearDemoData` | Deletes every `IDR-DEMO-` dispute, its rows and its Drive folder. Real disputes are untouched. |
+
+After switching views, reload the web app.
+
+**What the demo data covers:**
+
+| Dispute | Stage | Shows |
+| --- | --- | --- |
+| 001 | Draft | Stopped after Qualification page 1 |
+| 002 | Draft | Stopped part-way through the parties page |
+| 003 | Draft | 2 line items, not yet finalized |
+| 004 | Returned | Sent back by the US desk with a reason (a QPA mismatch) |
+| 005 to 008 | Ready for US desk | 1, 3, 5 and 12 line items, each with a confirmation PDF. 008 shows the multi-page line items. |
+| 009 to 010 | Filed | Portal dispute number recorded |
+
+**A suggested demo:**
+1. **Lebanon view (`demoUseLebanonView`):**
+   - Open 003, add a line item, and finalize it to create the confirmation PDF.
+   - Then open 004 to show a returned dispute.
+2. **US view (`demoUseUsView`):**
+   - Open 008 and copy fields across the line tabs.
+   - Mark it filed with any number, then return 006 with a reason.
+3. **Lebanon view again:** 006 now appears under Returned, showing the reason.
 
 ## Access and data
 
