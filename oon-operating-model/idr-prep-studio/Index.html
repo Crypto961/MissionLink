@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><?= APP_NAME ?></title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-navy: #003B5C;
+      --primary-cyan: #00A3E0;
+      --functional-red: #E31B23;
+      --success-green: #10B981;
+      --warning-gold: #F59E0B;
+      --neutral-slate: #94A3B8;
+      --white: #FFFFFF;
+      --page: #F8FAFC;
+      --line: #DCE3EA;
+      --text-2: #475569;
+      --cyan-tint: #E3F5FC;
+      --green-tint: #E3F8F0;
+      --red-tint: #FDE8E9;
+      --gold-tint: #FEF3DC;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; background: var(--page); color: var(--primary-navy); font-size: 14px; line-height: 1.45; }
+
+    /* --- Immersive Minimalist Loader --- */
+    #loader-wrapper {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background-color: rgba(248, 250, 252, 0.85);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      z-index: 9999; transition: opacity 0.6s ease, visibility 0.6s ease;
+    }
+    #loader-wrapper.loaded { opacity: 0; visibility: hidden; }
+    .spinner { position: relative; width: 60px; height: 60px; }
+    .spinner-ring { position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 3px solid transparent; }
+    .spinner-ring:nth-child(1) { border-top-color: var(--primary-cyan); animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; }
+    .spinner-ring:nth-child(2) { border-bottom-color: var(--primary-navy); width: 80%; height: 80%; top: 10%; left: 10%; animation: spin-reverse 1s cubic-bezier(0.5, 0, 0.5, 1) infinite; }
+    .loader-text { margin-top: 20px; font-size: 14px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--primary-navy); animation: pulse-opacity 1.5s ease-in-out infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes spin-reverse { 0% { transform: rotate(360deg); } 100% { transform: rotate(0deg); } }
+    @keyframes pulse-opacity { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .error-msg { color: var(--functional-red); font-weight: bold; padding: 20px; text-align: center; background: var(--white); border-radius: 8px; box-shadow: 0 4px 15px rgba(227, 27, 35, 0.2); max-width: 600px; word-wrap: break-word; animation: none; }
+
+    /* --- Shell --- */
+    header.top { background: var(--primary-navy); color: var(--white); }
+    .top-in { max-width: 1100px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .logo { height: 40px; max-width: 160px; object-fit: contain; background: var(--white); border-radius: 8px; padding: 4px 10px; }
+    .app-name { font-weight: 800; font-size: 17px; }
+    .who { margin-left: auto; font-size: 12px; color: #C8D6E0; }
+    .desk-pill { background: var(--primary-cyan); color: var(--white); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; margin-left: 6px; }
+    .internal { background: var(--gold-tint); color: #6B4A00; font-weight: 600; font-size: 13px; text-align: center; padding: 8px 16px; border-bottom: 1px solid #F3D9A4; }
+    main { max-width: 1100px; margin: 0 auto; padding: 20px 20px 60px; }
+
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    h2 { font-size: 18px; margin: 0 0 12px; }
+    h3 { font-size: 15px; margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+    h3:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+    .sub { color: var(--text-2); margin: 0 0 16px; }
+    .card { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 22px; box-shadow: 0 6px 24px rgba(0, 59, 92, 0.06); }
+    .muted { color: var(--neutral-slate); }
+    .hidden { display: none !important; }
+
+    button, .btn { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; text-decoration: none; display: inline-block; }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    .primary { background: var(--primary-navy); color: var(--white); }
+    .primary:hover { background: var(--primary-cyan); }
+    .secondary { background: #E6EEF3; color: var(--primary-navy); }
+    .ghost { background: transparent; border: 1px solid var(--line); color: var(--text-2); }
+    .success { background: var(--success-green); color: var(--white); }
+    .danger { background: var(--white); border: 1px solid var(--functional-red); color: var(--functional-red); }
+    .link { background: none; padding: 0; color: var(--primary-cyan); font-weight: 600; }
+
+    /* list */
+    .list-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filters button { background: var(--white); border: 1px solid var(--line); color: var(--text-2); padding: 7px 12px; font-size: 13px; }
+    .filters button.on { background: var(--primary-navy); color: var(--white); border-color: var(--primary-navy); }
+    table.grid { width: 100%; border-collapse: collapse; background: var(--white); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    table.grid th { text-align: left; background: var(--primary-navy); color: var(--white); font-size: 12px; letter-spacing: 0.5px; padding: 10px 12px; }
+    table.grid td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+    table.grid tr.click { cursor: pointer; }
+    table.grid tr.click:hover td { background: var(--cyan-tint); }
+    .badge { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+    .b-draft { background: #E6EEF3; color: var(--primary-navy); }
+    .b-ready { background: var(--cyan-tint); color: #006D96; }
+    .b-filed { background: var(--green-tint); color: #0B7A57; }
+    .b-returned { background: var(--red-tint); color: #B3121A; }
+
+    /* wizard */
+    .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 16px; }
+    .steps button { background: #E6EEF3; color: var(--text-2); font-size: 12px; padding: 8px 6px; border-radius: 8px; }
+    .steps button.on { background: var(--primary-cyan); color: var(--white); }
+    .steps button.done { background: var(--navy-tint, #D7E4EC); color: var(--primary-navy); }
+    .mirror { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--primary-cyan); margin-bottom: 4px; }
+    .req-note { font-size: 13px; color: var(--text-2); margin: 0 0 14px; }
+    .req { color: var(--functional-red); font-weight: 700; }
+    .fields { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px 16px; }
+    .f { grid-column: span 12; }
+    .f.half { grid-column: span 6; }
+    .f.third { grid-column: span 4; }
+    .f.quarter { grid-column: span 3; }
+    .f > label, .f > .lbl { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+    .f input[type=text], .f input[type=email], .f input[type=date], .f select, .f textarea {
+      width: 100%; padding: 9px 10px; border: 1px solid #C5D0DA; border-radius: 8px; font: inherit; color: var(--primary-navy); background: var(--white);
+    }
+    .f textarea { min-height: 70px; resize: vertical; }
+    .f input:focus, .f select:focus, .f textarea:focus { outline: 2px solid var(--primary-cyan); outline-offset: 0; border-color: var(--primary-cyan); }
+    .f.err input, .f.err select, .f.err textarea { border-color: var(--functional-red); }
+    .f .msg { color: var(--functional-red); font-size: 12px; margin-top: 4px; }
+    .choices { display: grid; gap: 6px; }
+    .choices label { display: flex; gap: 8px; align-items: flex-start; font-weight: 500; font-size: 14px; }
+    .choices input { margin-top: 3px; }
+    .internal-box { background: var(--gold-tint); border-radius: 10px; padding: 14px; margin-bottom: 18px; }
+    .internal-box .lbl { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #6B4A00; margin-bottom: 8px; }
+    .upload { border: 2px dashed var(--line); border-radius: 10px; padding: 12px; background: #FBFCFD; }
+    .upload .note { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+    .file-list { display: grid; gap: 4px; margin-top: 8px; }
+    .file-list div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; background: var(--white); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+    .actions { display: flex; gap: 8px; justify-content: space-between; margin-top: 22px; flex-wrap: wrap; }
+    .actions .right { display: flex; gap: 8px; flex-wrap: wrap; }
+    .problems { background: var(--red-tint); border-left: 4px solid var(--functional-red); border-radius: 8px; padding: 12px 16px; margin-top: 16px; }
+    .problems ul { margin: 6px 0 0; padding-left: 18px; }
+    .okbox { background: var(--green-tint); border-left: 4px solid var(--success-green); border-radius: 8px; padding: 12px 16px; margin-top: 16px; }
+    .lines-mini { display: grid; gap: 6px; margin-bottom: 14px; }
+    .lines-mini div { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: #F8FAFC; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+    .warn { background: var(--gold-tint); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 10px; }
+
+    /* copy desk */
+    .desk-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .progress { min-width: 220px; }
+    .bar { height: 10px; background: #E6EEF3; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+    .bar i { display: block; height: 100%; background: var(--success-green); width: 0; transition: width 0.3s; }
+    .page-card { margin-bottom: 16px; }
+    .page-card .mirror { margin-bottom: 8px; }
+    .crow { display: grid; grid-template-columns: 1.2fr 1.4fr auto; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+    .crow:first-of-type { border-top: 0; }
+    .crow .l { font-size: 13px; color: var(--text-2); }
+    .crow .v { font-weight: 600; word-break: break-word; }
+    .crow.copied .v { color: #0B7A57; }
+    .copy { background: var(--primary-navy); color: var(--white); padding: 6px 12px; font-size: 12px; min-width: 76px; }
+    .crow.copied .copy { background: var(--success-green); }
+    .crow .copy[disabled] { background: #E6EEF3; color: var(--neutral-slate); cursor: default; opacity: 1; }
+    .tick-list { margin: 0; padding-left: 18px; font-weight: 600; }
+    .sec-title { font-weight: 700; margin: 14px 0 4px; font-size: 14px; }
+    .line-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .line-tabs button { background: #E6EEF3; color: var(--text-2); padding: 6px 10px; font-size: 12px; }
+    .line-tabs button.on { background: var(--primary-cyan); color: var(--white); }
+    .line-tabs button.complete { box-shadow: inset 0 -3px 0 var(--success-green); }
+    .finish { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .finish input[type=text], .finish textarea { width: 100%; padding: 9px 10px; border: 1px solid #C5D0DA; border-radius: 8px; font: inherit; margin: 6px 0 10px; }
+    .toast { position: fixed; right: 20px; bottom: 20px; background: var(--primary-navy); color: var(--white); padding: 12px 16px; border-radius: 10px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 50; max-width: 420px; }
+    .toast.error { background: var(--functional-red); }
+
+    @media (max-width: 760px) {
+      .f.half, .f.third, .f.quarter { grid-column: span 12; }
+      .steps { grid-template-columns: repeat(2, 1fr); }
+      .crow { grid-template-columns: 1fr auto; }
+      .crow .l { grid-column: 1 / -1; }
+      .finish { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loader-wrapper" role="status" aria-live="polite">
+    <div class="spinner"><div class="spinner-ring"></div><div class="spinner-ring"></div></div>
+    <div class="loader-text">Loading</div>
+  </div>
+
+  <header class="top">
+    <div class="top-in">
+      <img class="logo" src="<?= LOGO_URL ?>" alt="Company logo"
+           onerror="this.onerror=null;this.src='data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22180%22 height=%2270%22%3E%3Crect width=%22180%22 height=%2270%22 rx=%2210%22 fill=%22%23E6EEF3%22/%3E%3Ctext x=%2290%22 y=%2242%22 font-family=%22Arial%22 font-size=%2216%22 font-weight=%22700%22 fill=%22%23003B5C%22 text-anchor=%22middle%22%3ELogo%3C/text%3E%3C/svg%3E';">
+      <div class="app-name"><?= APP_NAME ?></div>
+      <div class="who" id="who"></div>
+    </div>
+  </header>
+  <div class="internal">Internal preparation tool. It mirrors the federal IDR portal's pages but is not the portal: nothing here is sent to CMS.</div>
+
+  <main id="app"></main>
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script>
+  (function () {
+    // ---------------------------------------------------------------- state and server calls
+    var S = { boot: null, view: 'list', filter: 'Draft', id: null, d: {}, lines: [], files: [], page: 0, line: null, copied: {}, deskLine: 0 };
+    var app = document.getElementById('app');
+    var loader = document.getElementById('loader-wrapper');
+    var PAGES = ['q1', 'q2', 'parties', 'lines', 'final'];
+    var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    function call(name) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function (resolve, reject) {
+        var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (e) { reject(e && e.message ? e : new Error(String(e))); });
+        r[name].apply(r, args);
+      });
+    }
+
+    function esc(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+    }
+
+    function toast(msg, isError) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast' + (isError ? ' error' : '');
+      clearTimeout(toast.h);
+      toast.h = setTimeout(function () { t.className = 'toast hidden'; }, isError ? 7000 : 3000);
+    }
+
+    function busy(on) {
+      app.querySelectorAll('button').forEach(function (b) { b.disabled = on; });
+    }
+
+    function fail(e) { busy(false); toast(e.message || String(e), true); }
+
+    function badge(status) {
+      var cls = { 'Draft': 'b-draft', 'Ready for US desk': 'b-ready', 'Filed': 'b-filed', 'Returned': 'b-returned' }[status] || 'b-draft';
+      return '<span class="badge ' + cls + '">' + esc(status) + '</span>';
+    }
+
+    // ---------------------------------------------------------------- formatting (portal formats)
+
+    function portalDate(iso) {
+      var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return m ? MONTHS[Number(m[2]) - 1] + ' ' + Number(m[3]) + ', ' + m[1] : String(iso || '');
+    }
+    function usDate(iso) {
+      var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return m ? m[2] + '/' + m[3] + '/' + m[1] : String(iso || '');
+    }
+    function money(v) {
+      if (v === '' || v == null) return '';
+      var n = Number(v);
+      return isNaN(n) ? String(v) : n.toFixed(2);
+    }
+    function moneyShown(v) {
+      if (v === '' || v == null) return '';
+      return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    // Value as it should be typed or pasted into the portal.
+    function copyValue(f, v) {
+      if (f.type === 'date') return portalDate(v);
+      if (f.type === 'money') return money(v);
+      return String(v == null ? '' : v);
+    }
+
+    // ---------------------------------------------------------------- validation (same rules as the server)
+
+    function fieldRequired(f, rec) {
+      return f.required || (f.requiredIf && String(rec[f.requiredIf.key] || '').indexOf(f.requiredIf.includes) !== -1);
+    }
+    function check(f, value, rec) {
+      var v = value == null ? '' : String(value).trim();
+      if (!v) return fieldRequired(f, rec) ? 'Required' : '';
+      if (f.type === 'zip' && !/^\d{5}(-\d{4})?$/.test(v)) return 'Use 12345 or 12345-6789';
+      if (f.type === 'phone' && !/^\d{3}-\d{3}-\d{4}$/.test(v)) return 'Use 214-555-0100';
+      if (f.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return 'Not a valid email';
+      if (f.type === 'money' && !/^\d+(\.\d{1,2})?$/.test(v)) return 'Use an amount like 154.00';
+      if (f.type === 'date') {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'Enter a date';
+        if (f.min && v < f.min) return 'Select a date after Dec 31, 2021';
+        if (f.max === 'today' && v > new Date().toISOString().slice(0, 10)) return 'Cannot be in the future';
+      }
+      return '';
+    }
+
+    // ---------------------------------------------------------------- field rendering
+
+    function optionList(f) {
+      return Array.isArray(f.options) ? f.options : (S.boot.options[f.options] || []);
+    }
+
+    function filesFor(category, lineNo) {
+      return S.files.filter(function (x) {
+        return x.Category === category && (category !== 'qpa' || Number(x.LineNo) === Number(lineNo));
+      });
+    }
+
+    function renderField(f, rec, lineNo) {
+      var v = rec[f.key] == null ? '' : rec[f.key];
+      var star = fieldRequired(f, rec) || f.required ? '<span class="req">*</span> ' : '';
+      var width = f.width ? ' ' + f.width : '';
+      var id = 'f_' + f.key;
+      var h = '<div class="f' + width + '" data-key="' + esc(f.key) + '">';
+      if (f.type === 'radio' || f.type === 'checkboxes') {
+        var picked = f.type === 'checkboxes' ? String(v).split(/;\s*/) : [String(v)];
+        h += '<div class="lbl">' + star + esc(f.label) + '</div><div class="choices">';
+        optionList(f).forEach(function (o, i) {
+          h += '<label><input type="' + (f.type === 'radio' ? 'radio' : 'checkbox') + '" name="' + esc(f.key) + '" value="' + esc(o) + '"' +
+            (picked.indexOf(o) !== -1 ? ' checked' : '') + '> ' + esc(o) + '</label>';
+        });
+        h += '</div>';
+      } else if (f.type === 'select') {
+        h += '<label for="' + id + '">' + star + esc(f.label) + '</label><select id="' + id + '" name="' + esc(f.key) + '"><option value="">Select an Option</option>';
+        optionList(f).forEach(function (o) { h += '<option' + (o === String(v) ? ' selected' : '') + '>' + esc(o) + '</option>'; });
+        h += '</select>';
+      } else if (f.type === 'textarea') {
+        h += '<label for="' + id + '">' + star + esc(f.label) + '</label><textarea id="' + id + '" name="' + esc(f.key) + '">' + esc(v) + '</textarea>';
+      } else if (f.type === 'file') {
+        var list = filesFor(f.category, lineNo);
+        h += '<div class="lbl">' + star + esc(f.label) + '</div><div class="upload">' +
+          '<input type="file" multiple data-category="' + esc(f.category) + '" id="' + id + '">' +
+          '<div class="note">Files go to this dispute\'s Drive folder for the US desk to upload. Under 45 MB each.</div>' +
+          '<div class="file-list" data-files="' + esc(f.category) + '">' + fileRows(list) + '</div></div>';
+      } else {
+        var type = f.type === 'date' ? 'date' : (f.type === 'email' ? 'email' : 'text');
+        var extra = f.type === 'money' ? ' inputmode="decimal"' : '';
+        if (f.type === 'date' && f.min) extra += ' min="' + f.min + '"';
+        if (f.type === 'date' && f.max === 'today') extra += ' max="' + new Date().toISOString().slice(0, 10) + '"';
+        h += '<label for="' + id + '">' + star + esc(f.label) + '</label><input type="' + type + '" id="' + id + '" name="' + esc(f.key) + '" value="' + esc(v) + '"' +
+          (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + extra + '>';
+      }
+      return h + '<div class="msg"></div></div>';
+    }
+
+    function fileRows(list) {
+      return list.map(function (x) {
+        return '<div><a href="' + esc(x.Url) + '" target="_blank" rel="noopener">' + esc(x.Name) + '</a>' +
+          (editable() ? '<button class="link" data-remove-file="' + esc(x.FileId) + '">Remove</button>' : '') + '</div>';
+      }).join('') || '<span class="muted">No File Selected.</span>';
+    }
+
+    function readFields(container, fields) {
+      var out = {};
+      fields.forEach(function (f) {
+        if (f.type === 'file') return;
+        var box = container.querySelector('.f[data-key="' + f.key + '"]');
+        if (!box) return;
+        if (f.type === 'radio') {
+          var on = box.querySelector('input:checked');
+          out[f.key] = on ? on.value : '';
+        } else if (f.type === 'checkboxes') {
+          out[f.key] = Array.prototype.map.call(box.querySelectorAll('input:checked'), function (i) { return i.value; }).join('; ');
+        } else {
+          out[f.key] = box.querySelector('input, select, textarea').value.trim();
+        }
+      });
+      return out;
+    }
+
+    function showErrors(container, fields, rec) {
+      var bad = 0;
+      fields.forEach(function (f) {
+        var box = container.querySelector('.f[data-key="' + f.key + '"]');
+        if (!box || f.type === 'file') return;
+        var msg = check(f, rec[f.key], rec);
+        box.classList.toggle('err', !!msg);
+        box.querySelector('.msg').textContent = msg;
+        if (msg) bad++;
+      });
+      if (bad) {
+        var first = container.querySelector('.f.err');
+        if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return bad;
+    }
+
+    function pageFields(page) {
+      var all = [];
+      page.sections.forEach(function (s) { all = all.concat(s.fields); });
+      return all;
+    }
+
+    function editable() { return S.d.Status !== 'Filed'; }
+
+    // ---------------------------------------------------------------- file uploads
+
+    function readAsBase64(file) {
+      return new Promise(function (resolve, reject) {
+        var r = new FileReader();
+        r.onload = function () { resolve(String(r.result).split(',')[1] || ''); };
+        r.onerror = function () { reject(new Error('Could not read ' + file.name)); };
+        r.readAsDataURL(file);
+      });
+    }
+
+    function uploadAll(files, category, lineNo) {
+      var chain = Promise.resolve();
+      Array.prototype.forEach.call(files, function (file) {
+        chain = chain.then(function () {
+          if (file.size > 45 * 1024 * 1024) throw new Error(file.name + ' is over 45 MB.');
+          return readAsBase64(file).then(function (b64) {
+            return call('uploadFile', S.id, category, lineNo || '', file.name, file.type, b64);
+          });
+        });
+      });
+      return chain.then(refresh);
+    }
+
+    // After an upload or removal only the file lists change, so anything typed but not yet saved stays put.
+    function updateFileLists(container, lineNo) {
+      container.querySelectorAll('[data-files]').forEach(function (box) {
+        box.innerHTML = fileRows(filesFor(box.getAttribute('data-files'), lineNo()));
+      });
+      wireRemoves(container, lineNo);
+    }
+
+    function wireRemoves(container, lineNo) {
+      container.querySelectorAll('[data-remove-file]').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.preventDefault();
+          busy(true);
+          call('removeFile', S.id, b.getAttribute('data-remove-file')).then(refresh)
+            .then(function () { busy(false); updateFileLists(container, lineNo); }).catch(fail);
+        });
+      });
+    }
+
+    // lineNo is a function so a line saved just before its first upload is picked up.
+    function wireUploads(container, lineNo, beforeUpload) {
+      container.querySelectorAll('input[type=file][data-category]').forEach(function (input) {
+        input.addEventListener('change', function () {
+          if (!input.files.length) return;
+          var files = Array.prototype.slice.call(input.files);
+          var cat = input.getAttribute('data-category');
+          busy(true);
+          (beforeUpload ? beforeUpload() : Promise.resolve(lineNo()))
+            .then(function (ln) { return uploadAll(files, cat, ln); })
+            .then(function () { busy(false); input.value = ''; updateFileLists(container, lineNo); toast('Uploaded'); })
+            .catch(fail);
+        });
+      });
+      wireRemoves(container, lineNo);
+    }
+
+    // ---------------------------------------------------------------- data loading
+
+    function refresh() {
+      if (!S.id) return Promise.resolve();
+      return call('getDispute', S.id).then(function (r) {
+        S.d = r.dispute; S.lines = r.lines; S.files = r.files;
+      });
+    }
+
+    function open(id, view) {
+      S.id = id; S.copied = {}; S.deskLine = 0; S.line = null;
+      busy(true);
+      refresh().then(function () {
+        busy(false);
+        if (view) S.view = view;
+        else if (S.d.Status === 'Ready for US desk' && S.boot.isUsDesk) S.view = 'desk';
+        else { S.view = 'edit'; S.page = S.lines.length ? 4 : 0; }
+        render();
+      }).catch(fail);
+    }
+
+    // ---------------------------------------------------------------- views
+
+    function render() {
+      window.scrollTo(0, 0);
+      if (S.view === 'list') return renderList();
+      if (S.view === 'desk') return renderDesk();
+      return renderEditor();
+    }
+
+    function renderList() {
+      var filters = ['Draft', 'Returned', 'Ready for US desk', 'Filed', 'All'];
+      app.innerHTML = '<div class="list-head"><div><h1>Disputes</h1><p class="sub">Prepare each Notice of IDR Initiation here, page by page, exactly as the portal asks for it.</p></div>' +
+        '<button class="primary" id="new">+ New dispute</button></div>' +
+        '<div class="filters">' + filters.map(function (f) { return '<button data-f="' + esc(f) + '"' + (S.filter === f ? ' class="on"' : '') + '>' + esc(f) + '</button>'; }).join('') + '</div>' +
+        '<div id="rows" style="margin-top:12px"><p class="muted">Loading…</p></div>';
+      app.querySelector('#new').addEventListener('click', function () {
+        S.id = null; S.d = { Status: 'Draft' }; S.lines = []; S.files = []; S.page = 0; S.view = 'edit'; render();
+      });
+      app.querySelectorAll('[data-f]').forEach(function (b) {
+        b.addEventListener('click', function () { S.filter = b.getAttribute('data-f'); renderList(); });
+      });
+      call('listDisputes', S.filter).then(function (rows) {
+        var box = app.querySelector('#rows');
+        if (!rows.length) { box.innerHTML = '<p class="muted">Nothing here.</p>'; return; }
+        box.innerHTML = '<table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Line items</th><th>Team / owner</th><th>Last update</th></tr>' +
+          rows.map(function (r) {
+            return '<tr class="click" data-id="' + esc(r.id) + '"><td><b>' + esc(r.id) + '</b></td><td>' + badge(r.status) +
+              (r.returnReason ? '<div class="muted" style="margin-top:4px">' + esc(r.returnReason) + '</div>' : '') + '</td><td>' + esc(r.plan) +
+              '</td><td>' + esc(r.lines) + '</td><td>' + esc([r.team, r.owner].filter(String).join(' / ')) + '</td><td>' + esc(r.updatedAt) + '<div class="muted">' + esc(r.updatedBy) + '</div></td></tr>';
+          }).join('') + '</table>';
+        box.querySelectorAll('tr[data-id]').forEach(function (tr) {
+          tr.addEventListener('click', function () { open(tr.getAttribute('data-id')); });
+        });
+      }).catch(fail);
+    }
+
+    // ---------------------------------------------------------------- editor (offshore entry)
+
+    function stepper() {
+      var names = ['1 · Qualification', '2 · Qualification', '3 · Parties', '4 · Line items', '5 · Summary'];
+      return '<div class="steps">' + names.map(function (n, i) {
+        return '<button data-step="' + i + '" class="' + (i === S.page ? 'on' : (i < S.page ? 'done' : '')) + '"' + (!S.id && i > 0 ? ' disabled' : '') + '>' + n + '</button>';
+      }).join('') + '</div>';
+    }
+
+    function editorShell(inner, mirror, title) {
+      return '<div class="list-head"><div><button class="link" id="exit">← All disputes</button><h1>' + esc(S.id || 'New dispute') + ' ' + badge(S.d.Status || 'Draft') + '</h1></div>' +
+        (S.d.ConfirmationPdfUrl ? '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(S.d.ConfirmationPdfUrl) + '">Confirmation PDF</a>' : '') + '</div>' +
+        (S.d.Status === 'Returned' && S.d.ReturnReason ? '<div class="problems"><b>Returned by the US desk:</b> ' + esc(S.d.ReturnReason) + '</div><br>' : '') +
+        stepper() + '<div class="card"><div class="mirror">Mirrors portal page: ' + esc(mirror) + '</div><h2>' + esc(title) + '</h2>' +
+        '<p class="req-note"><span class="req">*</span> Indicates a required field</p>' + inner + '</div>';
+    }
+
+    function wireShell() {
+      app.querySelector('#exit').addEventListener('click', function () { S.view = 'list'; render(); });
+      app.querySelectorAll('[data-step]').forEach(function (b) {
+        b.addEventListener('click', function () { S.page = Number(b.getAttribute('data-step')); S.line = null; render(); });
+      });
+    }
+
+    function renderEditor() {
+      var sc = S.boot.schema;
+      if (S.page <= 2) return renderHeaderPage(sc.pages[S.page]);
+      if (S.page === 3) return renderLines();
+      return renderFinal();
+    }
+
+    function renderHeaderPage(page) {
+      var inner = '';
+      if (page.id === 'q1') {
+        inner += '<div class="internal-box"><div class="lbl">Internal (not on the portal)</div><div class="fields">' +
+          renderField({ key: 'Team', label: 'Team', type: 'text', width: 'half' }, S.d) +
+          renderField({ key: 'Owner', label: 'Owner (account owner)', type: 'text', width: 'half' }, S.d) + '</div></div>';
+      }
+      page.sections.forEach(function (sec) {
+        if (sec.title) inner += '<h3>' + esc(sec.title) + '</h3>';
+        inner += '<div class="fields">' + sec.fields.map(function (f) { return renderField(f, S.d); }).join('') + '</div>';
+      });
+      inner += '<div class="actions"><button class="ghost" id="exit2">Exit</button><div class="right">' +
+        (S.page > 0 ? '<button class="secondary" id="back">Back</button>' : '') +
+        '<button class="primary" id="cont">' + (editable() ? 'Save & Continue' : 'Continue') + '</button></div></div>';
+      app.innerHTML = editorShell(inner, page.step, page.title);
+      wireShell();
+
+      var fields = pageFields(page);
+      if (page.id === 'q1') fields = [{ key: 'Team', type: 'text' }, { key: 'Owner', type: 'text' }].concat(fields);
+      var card = app.querySelector('.card');
+      app.querySelector('#exit2').addEventListener('click', function () { S.view = 'list'; render(); });
+      if (app.querySelector('#back')) app.querySelector('#back').addEventListener('click', function () { S.page--; render(); });
+      wireUploads(card, function () { return ''; }, null);
+      card.querySelectorAll('input[type=file]').forEach(function (i) { if (!S.id) i.disabled = true; });
+
+      app.querySelector('#cont').addEventListener('click', function () {
+        if (!editable()) { S.page++; render(); return; }
+        var values = readFields(card, fields);
+        var rec = Object.assign({}, S.d, values);
+        var bad = showErrors(card, fields, rec);
+        var missingFile = fields.some(function (f) { return f.type === 'file' && f.required && !filesFor(f.category).length; });
+        if (bad) { toast('Fix the highlighted fields to continue.', true); return; }
+        if (missingFile) { toast('Upload the required document before continuing.', true); return; }
+        busy(true);
+        call('saveDispute', { id: S.id, values: values, page: page.id }).then(function (id) {
+          S.id = id;
+          return refresh();
+        }).then(function () { busy(false); S.page++; render(); }).catch(fail);
+      });
+    }
+
+    function renderLines() {
+      var sc = S.boot.schema.line;
+      var inner = '';
+      if (S.line === null) {
+        inner += '<div class="lines-mini">' + (S.lines.length ? S.lines.map(function (l) {
+          return '<div><span><b>Line ' + esc(l.LineNo) + '</b> · ' + esc(l.claim_number) + ' · ' + esc(portalDate(l.service_date)) + ' · ' + esc(moneyShown(l.qpa)) + ' · ' + esc(l.service_code) + '</span>' +
+            '<button class="link" data-edit-line="' + esc(l.LineNo) + '">Edit</button></div>';
+        }).join('') : '<span class="muted">No line items yet.</span>') + '</div>';
+        if (S.lines.length >= 50) inner += '<div class="warn">This dispute has 50 line items, the maximum for one batched dispute.</div>';
+        inner += '<div class="actions"><button class="ghost" id="exit2">Exit</button><div class="right"><button class="secondary" id="back">Back</button>' +
+          (editable() && S.lines.length < 50 ? '<button class="secondary" id="add">+ Add line item</button>' : '') +
+          '<button class="primary" id="next"' + (S.lines.length ? '' : ' disabled') + '>Continue to summary</button></div></div>';
+        app.innerHTML = editorShell(inner, sc.step, sc.title);
+        wireShell();
+        app.querySelector('#exit2').addEventListener('click', function () { S.view = 'list'; render(); });
+        app.querySelector('#back').addEventListener('click', function () { S.page = 2; render(); });
+        if (app.querySelector('#add')) app.querySelector('#add').addEventListener('click', function () { S.line = {}; render(); });
+        app.querySelector('#next').addEventListener('click', function () { S.page = 4; render(); });
+        app.querySelectorAll('[data-edit-line]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var n = Number(b.getAttribute('data-edit-line'));
+            S.line = Object.assign({}, S.lines.filter(function (l) { return Number(l.LineNo) === n; })[0]);
+            render();
+          });
+        });
+        return;
+      }
+
+      var rec = S.line;
+      var lineNo = rec.LineNo || '';
+      inner += '<div class="mirror" style="color:var(--text-2)">' + (lineNo ? 'Editing line ' + esc(lineNo) : 'New line ' + (S.lines.length + 1)) + ' of the batch</div>';
+      sc.sections.forEach(function (sec) {
+        inner += '<h3>' + esc(sec.title) + '</h3><div class="fields">' + sec.fields.map(function (f) { return renderField(f, rec, lineNo); }).join('') + '</div>';
+      });
+      inner += '<div class="warn">For open negotiation start dates on or after November 1, 2026, a batch can have at most 50 line items.</div>';
+      inner += '<div class="actions"><div class="right"><button class="ghost" id="cancel">Cancel</button>' +
+        (lineNo && editable() ? '<button class="danger" id="del">Delete line</button>' : '') + '</div><div class="right">' +
+        (editable() ? '<button class="secondary" id="save">Save</button><button class="primary" id="saveadd">Save & Add Another</button>' : '') + '</div></div>';
+      app.innerHTML = editorShell(inner, sc.step, sc.title);
+      wireShell();
+      var card = app.querySelector('.card');
+      var fields = pageFields(sc);
+
+      // Files picked on a new line are uploaded once the line is saved.
+      wireUploads(card, function () { return S.line && S.line.LineNo; }, function () {
+        if (S.line.LineNo) return Promise.resolve(S.line.LineNo);
+        return saveLine(card, fields, true);
+      });
+
+      app.querySelector('#cancel').addEventListener('click', function () { S.line = null; render(); });
+      if (app.querySelector('#del')) app.querySelector('#del').addEventListener('click', function () {
+        if (!confirm('Delete line ' + lineNo + '?')) return;
+        busy(true);
+        call('deleteLine', S.id, lineNo).then(refresh).then(function () { busy(false); S.line = null; render(); }).catch(fail);
+      });
+      if (app.querySelector('#save')) {
+        app.querySelector('#save').addEventListener('click', function () {
+          saveLine(card, fields, false).then(function (n) { if (n) { S.line = null; S.page = 4; render(); } }).catch(function () {});
+        });
+        app.querySelector('#saveadd').addEventListener('click', function () {
+          saveLine(card, fields, false).then(function (n) { if (n) { S.line = {}; render(); toast('Line ' + n + ' saved'); } }).catch(function () {});
+        });
+      }
+    }
+
+    // Saves the open line form. With skipFileCheck, it saves without requiring QPA documents (used before an upload).
+    function saveLine(card, fields, skipFileCheck) {
+      var values = readFields(card, fields);
+      var rec = Object.assign({}, S.line, values);
+      if (showErrors(card, fields, rec)) { toast('Fix the highlighted fields to save the line.', true); return Promise.reject(new Error('Fix the highlighted fields first.')); }
+      if (!skipFileCheck && !(S.line.LineNo && filesFor('qpa', S.line.LineNo).length)) {
+        toast('Upload the claim and QPA documentation for this line.', true);
+        return Promise.resolve(null);
+      }
+      busy(true);
+      return call('saveLine', S.id, S.line.LineNo || null, values).then(function (n) {
+        S.line = Object.assign({}, rec, { LineNo: n });
+        return refresh().then(function () { busy(false); return n; });
+      }).catch(function (e) { fail(e); throw e; });
+    }
+
+    function renderFinal() {
+      var fin = S.boot.schema.final;
+      var inner = '<p class="sub">Review summary of qualified items and/or services. Select Edit if you need to change an item or service.</p>' +
+        '<h3>Summary of Qualified Items and/or Services</h3>' +
+        '<div style="overflow-x:auto"><table class="grid"><tr><th>#</th>' + fin.columns.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '<th></th></tr>' +
+        S.lines.map(function (l) {
+          return '<tr><td>' + esc(l.LineNo) + '</td>' + fin.columns.map(function (c) {
+            var v = l[c.key];
+            return '<td>' + esc(c.type === 'date' ? usDate(v) : c.type === 'money' ? moneyShown(v) : v) + '</td>';
+          }).join('') + '<td>' + (editable() ? '<button class="link" data-edit-line="' + esc(l.LineNo) + '">Edit</button>' : '') + '</td></tr>';
+        }).join('') + '</table></div>' +
+        (editable() && S.lines.length < 50 ? '<p><button class="secondary" id="addmore">Add Another Item</button></p>' : '') +
+        '<h3></h3><div class="fields">' + renderField(fin.additional, S.d) + '</div>' +
+        '<div id="result"></div>' +
+        '<div class="actions"><button class="ghost" id="exit2">Exit</button><div class="right"><button class="secondary" id="back">Back</button>' +
+        (editable() ? '<button class="primary" id="finalize">Save & create confirmation PDF</button>' : '') + '</div></div>';
+      app.innerHTML = editorShell(inner, fin.step, fin.title);
+      wireShell();
+      var card = app.querySelector('.card');
+      wireUploads(card, function () { return ''; }, null);
+      app.querySelector('#exit2').addEventListener('click', function () { S.view = 'list'; render(); });
+      app.querySelector('#back').addEventListener('click', function () { S.page = 3; render(); });
+      if (app.querySelector('#addmore')) app.querySelector('#addmore').addEventListener('click', function () { S.page = 3; S.line = {}; render(); });
+      app.querySelectorAll('[data-edit-line]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var n = Number(b.getAttribute('data-edit-line'));
+          S.page = 3;
+          S.line = Object.assign({}, S.lines.filter(function (l) { return Number(l.LineNo) === n; })[0]);
+          render();
+        });
+      });
+      if (app.querySelector('#finalize')) app.querySelector('#finalize').addEventListener('click', function () {
+        busy(true);
+        call('finalizeDispute', S.id).then(function (r) {
+          busy(false);
+          var box = app.querySelector('#result');
+          if (!r.ok) {
+            box.innerHTML = '<div class="problems"><b>Fix these before it can go to the US desk:</b><ul>' +
+              r.problems.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul></div>';
+            box.scrollIntoView({ behavior: 'smooth' });
+            return;
+          }
+          return refresh().then(function () {
+            render();
+            app.querySelector('#result').innerHTML = '<div class="okbox"><b>Saved and sent to the US desk.</b> The confirmation PDF of this page is in the dispute folder: ' +
+              '<a target="_blank" rel="noopener" href="' + esc(r.pdfUrl) + '">open the PDF</a>.</div>';
+          });
+        }).catch(fail);
+      });
+    }
+
+    // ---------------------------------------------------------------- US copy desk
+
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text).catch(function () { return legacyCopy(text); });
+      }
+      return legacyCopy(text);
+    }
+    function legacyCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok ? Promise.resolve() : Promise.reject(new Error('Copy blocked by the browser. Select the value and press Ctrl+C.'));
+    }
+
+    function copyRow(key, label, value, kind) {
+      var empty = value === '' || value == null;
+      var done = S.copied[key];
+      var shown = empty ? '<span class="muted">(blank: leave empty)</span>' : esc(value);
+      var btn = kind === 'tick' || kind === 'file' ? '' :
+        '<button class="copy" data-copy="' + esc(key) + '" data-value="' + esc(value) + '"' + (empty ? ' disabled' : '') + '>' + (done ? 'Copied ✓' : 'Copy') + '</button>';
+      return '<div class="crow' + (done ? ' copied' : '') + '" data-row="' + esc(key) + '"><div class="l">' + esc(label) + '</div><div class="v">' + shown + '</div>' + btn + '</div>';
+    }
+
+    function deskFields(rec, fields, prefix, lineNo) {
+      var h = '';
+      fields.forEach(function (f) {
+        var key = prefix + f.key;
+        if (f.type === 'file') {
+          var list = filesFor(f.category, lineNo);
+          h += '<div class="crow"><div class="l">' + esc(f.label) + '</div><div class="v">' +
+            (list.length ? list.map(function (x) { return '<a href="' + esc(x.Url) + '" target="_blank" rel="noopener">' + esc(x.Name) + '</a>'; }).join('<br>') : '<span class="muted">No file</span>') +
+            '</div><span class="muted" style="font-size:12px">Upload in portal</span></div>';
+          return;
+        }
+        var v = rec[f.key];
+        // Conditional fields (Other: description) only appear when they apply.
+        if (f.requiredIf && !fieldRequired(f, rec) && (v === '' || v == null)) return;
+        if (f.type === 'checkboxes') {
+          var items = String(v || '').split(/;\s*/).filter(String);
+          h += '<div class="crow"><div class="l">' + esc(f.label) + '</div><div class="v"><ul class="tick-list">' +
+            items.map(function (i) { return '<li>Tick: ' + esc(i) + '</li>'; }).join('') + '</ul></div><span></span></div>';
+          return;
+        }
+        if (f.type === 'radio') {
+          h += '<div class="crow"><div class="l">' + esc(f.label) + '</div><div class="v">Select: ' + esc(v) + '</div><span></span></div>';
+          return;
+        }
+        h += copyRow(key, f.label + (f.type === 'select' ? ' (choose)' : ''), copyValue(f, v), 'copy');
+      });
+      return h;
+    }
+
+    function deskCounts() {
+      var all = app.querySelectorAll('.copy:not([disabled])').length;
+      var done = app.querySelectorAll('.crow.copied').length;
+      return { all: all, done: done };
+    }
+
+    function renderDesk() {
+      var sc = S.boot.schema;
+      var h = '<div class="desk-head"><div><button class="link" id="exit">← All disputes</button><h1>' + esc(S.id) + ' ' + badge(S.d.Status) + '</h1>' +
+        '<p class="sub">Copy each value into the portal in this order. Pages match the portal\'s screens.</p></div>' +
+        '<div class="progress"><b id="prog-text"></b><div class="bar"><i id="prog-bar"></i></div>' +
+        '<p style="margin:8px 0 0"><a target="_blank" rel="noopener" href="' + esc(S.d.FolderUrl) + '">Open dispute folder</a>' +
+        (S.d.ConfirmationPdfUrl ? ' · <a target="_blank" rel="noopener" href="' + esc(S.d.ConfirmationPdfUrl) + '">Prepared summary PDF</a>' : '') + '</p></div></div>';
+
+      sc.pages.forEach(function (p) {
+        h += '<div class="card page-card"><div class="mirror">Portal page: ' + esc(p.step) + '</div>';
+        p.sections.forEach(function (sec) {
+          var anyValue = sec.fields.some(function (f) { return f.type === 'file' || (S.d[f.key] !== '' && S.d[f.key] != null); });
+          if (!anyValue) return;
+          if (sec.title) h += '<div class="sec-title">' + esc(sec.title) + '</div>';
+          h += deskFields(S.d, sec.fields, 'h.', '');
+        });
+        h += '</div>';
+      });
+
+      h += '<div class="card page-card"><div class="mirror">Portal page: ' + esc(sc.line.step) + ' (one portal page per line)</div>' +
+        '<div class="line-tabs">' + S.lines.map(function (l, i) {
+          return '<button data-line-tab="' + i + '" class="' + (i === S.deskLine ? 'on' : '') + '">Line ' + esc(l.LineNo) + '</button>';
+        }).join('') + '</div>';
+      var line = S.lines[S.deskLine];
+      if (line) {
+        sc.line.sections.forEach(function (sec) {
+          h += '<div class="sec-title">' + esc(sec.title) + '</div>' + deskFields(line, sec.fields, 'l' + line.LineNo + '.', line.LineNo);
+        });
+        h += '<p class="muted" style="margin-top:10px">In the portal: Save & Add Another for the next line, Save after the last one.</p>';
+      }
+      h += '</div>';
+
+      var extra = filesFor('additional');
+      h += '<div class="card page-card"><div class="mirror">Portal page: ' + esc(sc.final.step) + '</div>' +
+        '<div class="crow"><div class="l">Additional Supporting Documentation</div><div class="v">' +
+        (extra.length ? extra.map(function (x) { return '<a href="' + esc(x.Url) + '" target="_blank" rel="noopener">' + esc(x.Name) + '</a>'; }).join('<br>') : '<span class="muted">None</span>') +
+        '</div><span class="muted" style="font-size:12px">Upload in portal</span></div>' +
+        '<p class="muted">Check the portal summary against ' + esc(S.lines.length) + ' line item(s), then Sign & Submit in the portal yourself.</p></div>';
+
+      if (S.d.Status !== 'Filed') {
+        h += '<div class="card"><div class="finish"><div><b>Filed in the portal</b>' +
+          '<input type="text" id="portal-no" placeholder="Dispute number from the portal">' +
+          '<div class="lbl" style="font-size:13px;font-weight:600">Portal confirmation PDF (optional)</div><input type="file" id="portal-pdf" accept="application/pdf" style="margin:6px 0 12px">' +
+          '<div><button class="success" id="filed">Mark as filed</button></div></div>' +
+          '<div><b>Something is wrong</b><textarea id="reason" rows="3" placeholder="What needs fixing in Lebanon"></textarea>' +
+          '<button class="danger" id="return">Return to Lebanon</button></div></div></div>';
+      } else {
+        h += '<div class="okbox">Filed by ' + esc(S.d.FiledBy) + ' on ' + esc(S.d.FiledAt) + '. Portal dispute number: <b>' + esc(S.d.PortalDisputeNumber) + '</b>' +
+          (S.d.PortalPdfUrl ? ' · <a target="_blank" rel="noopener" href="' + esc(S.d.PortalPdfUrl) + '">portal confirmation</a>' : '') + '</div>';
+      }
+
+      app.innerHTML = h;
+      app.querySelector('#exit').addEventListener('click', function () { S.view = 'list'; render(); });
+      app.querySelectorAll('[data-line-tab]').forEach(function (b) {
+        b.addEventListener('click', function () { S.deskLine = Number(b.getAttribute('data-line-tab')); var y = window.scrollY; renderDesk(); window.scrollTo(0, y); });
+      });
+      app.querySelectorAll('[data-copy]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var key = b.getAttribute('data-copy');
+          copyText(b.getAttribute('data-value')).then(function () {
+            S.copied[key] = true;
+            var row = b.closest('.crow');
+            row.classList.add('copied');
+            b.textContent = 'Copied ✓';
+            updateProgress();
+          }).catch(function (e) { toast(e.message, true); });
+        });
+      });
+      updateProgress();
+
+      if (app.querySelector('#filed')) {
+        app.querySelector('#filed').addEventListener('click', function () {
+          var no = app.querySelector('#portal-no').value.trim();
+          if (!no) { toast('Enter the dispute number from the portal.', true); return; }
+          var f = app.querySelector('#portal-pdf').files[0];
+          busy(true);
+          (f ? readAsBase64(f).then(function (b) { return { name: f.name, mimeType: f.type, data: b }; }) : Promise.resolve(null))
+            .then(function (pdf) { return call('markFiled', S.id, no, pdf); })
+            .then(refresh).then(function () { busy(false); toast('Marked as filed'); renderDesk(); }).catch(fail);
+        });
+        app.querySelector('#return').addEventListener('click', function () {
+          var reason = app.querySelector('#reason').value.trim();
+          if (!reason) { toast('Say what needs fixing.', true); return; }
+          busy(true);
+          call('returnDispute', S.id, reason).then(function () { busy(false); toast('Returned to Lebanon'); S.view = 'list'; S.filter = 'Ready for US desk'; render(); }).catch(fail);
+        });
+      }
+    }
+
+    function updateProgress() {
+      var c = deskCounts();
+      var t = app.querySelector('#prog-text'), bar = app.querySelector('#prog-bar');
+      if (!t) return;
+      t.textContent = c.done + ' of ' + c.all + ' fields copied on this view';
+      bar.style.width = (c.all ? Math.round(c.done / c.all * 100) : 0) + '%';
+    }
+
+    // ---------------------------------------------------------------- start
+
+    function showError(message) {
+      loader.classList.remove('loaded');
+      loader.innerHTML = '<div class="error-msg"></div>';
+      loader.firstChild.textContent = 'Something went wrong loading this page: ' + message;
+    }
+
+    call('getBootstrap').then(function (boot) {
+      S.boot = boot;
+      document.getElementById('who').innerHTML = esc(boot.user) + (boot.isUsDesk ? '<span class="desk-pill">US desk</span>' : '');
+      if (boot.isUsDesk) S.filter = 'Ready for US desk';
+      render();
+      setTimeout(function () { loader.classList.add('loaded'); }, 300);
+    }).catch(function (e) { showError(e.message || String(e)); });
+  })();
+  </script>
+</body>
+</html>
