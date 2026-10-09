@@ -600,7 +600,7 @@ function setup() {
       sh.getRange(1, 1, 1, header.length).setFontWeight('bold').setBackground('#003B5C').setFontColor('#FFFFFF');
       sh.setFrozenRows(1);
       // Plain text keeps dates as YYYY-MM-DD and amounts as typed.
-      sh.getRange(2, 1, 2000, header.length).setNumberFormat('@');
+      sh.getRange(2, 1, Math.max(sh.getMaxRows() - 1, 1), header.length).setNumberFormat('@');
     }
     return sh;
   };
