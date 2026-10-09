@@ -156,13 +156,13 @@
   table.cmp th.c, table.cmp td.c { background: var(--tint); }
 
   /* ---------- careers */
-  .ladder { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: end; }
+  .ladder { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; align-items: end; }
   .rung { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px; display: grid; gap: 6px; align-content: start; }
   .rung .lv { font-family: var(--font-data); font-size: 13px; font-weight: 600; color: var(--cyan); }
   .rung b { font-size: 15px; }
   .rung .pay { font-family: var(--font-data); font-size: 13px; color: var(--navy); }
   .rung span { font-size: 13px; color: var(--ink-2); }
-  .rung.r1 { min-height: 170px; } .rung.r2 { min-height: 195px; } .rung.r3 { min-height: 220px; } .rung.r4 { min-height: 245px; } .rung.r5 { min-height: 270px; }
+  .rung.r0 { min-height: 150px; } .rung.r1 { min-height: 170px; } .rung.r2 { min-height: 195px; } .rung.r3 { min-height: 220px; } .rung.r4 { min-height: 245px; } .rung.r5 { min-height: 270px; }
   .rung.r5 { background: var(--navy-fill); border-color: var(--navy-fill); color: var(--on-navy); }
   .rung.r5 .lv { color: #6FD0F5; } .rung.r5 .pay { color: #FFFFFF; } .rung.r5 span { color: var(--on-navy-2); }
   .keep { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
@@ -171,11 +171,18 @@
   .kp .v { font-family: var(--font-data); font-size: 18px; font-weight: 600; color: var(--navy); }
   .kp.warn .v { color: var(--warn); } .kp.crit .v { color: var(--crit); }
   .kp b { font-size: 14px; } .kp span { font-size: 13px; color: var(--ink-2); }
-  .badges { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 8px; }
+  .fams { display: grid; gap: 12px; }
+  .fam { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: center; }
+  .fam-label { display: grid; gap: 2px; }
+  .fam-label b { font-size: 14px; }
+  .fam-label span { font-size: 12px; color: var(--ink-2); }
+  .badges { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
   .badge { border-radius: 10px; padding: 10px 8px; text-align: center; display: grid; gap: 4px; font-size: 12px; border: 1px solid var(--line); background: var(--panel); }
   .badge .code { font-family: var(--font-data); font-weight: 600; font-size: 15px; color: var(--navy); }
   .badge.adv { background: var(--navy-fill); border-color: var(--navy-fill); color: var(--on-navy); }
   .badge.adv .code { color: #6FD0F5; }
+  .badge.spec { background: var(--tint); border-color: var(--tint); }
+  table.rota.counts td, table.rota.counts th { padding: 6px 10px; }
   .lead-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; }
   .lead-strip .box { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
 
@@ -271,15 +278,17 @@
     .keep, .steps5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ports { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .badges { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .fam { grid-template-columns: minmax(0, 1fr); gap: 6px; }
     .path { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; }
     .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .rung.r1, .rung.r2, .rung.r3, .rung.r4, .rung.r5 { min-height: 0; }
+    .rung.r0, .rung.r1, .rung.r2, .rung.r3, .rung.r4, .rung.r5 { min-height: 0; }
   }
   @media (max-width: 520px) {
     .ports { grid-template-columns: minmax(0, 1fr); }
     .crow { grid-template-columns: minmax(0, 1fr); }
     .facts { grid-template-columns: minmax(0, 1fr); }
     .keep { grid-template-columns: minmax(0, 1fr); }
+    .badges { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .bars { padding-right: 100px; }
     h2 { font-size: 22px; }
   }
@@ -306,7 +315,7 @@
     <div class="kpis" role="list">
       <div class="kpi" role="listitem"><span class="v">5</span><span class="l">US desk staff with Model C, about 15 minutes per dispute</span></div>
       <div class="kpi" role="listitem"><span class="v">10</span><span class="l">full-cycle teams replace 12 facility teams</span></div>
-      <div class="kpi" role="listitem"><span class="v">L1–L5</span><span class="l">five levels; 9 skill badges drive level, pay and routing</span></div>
+      <div class="kpi" role="listitem"><span class="v">L0–L5</span><span class="l">six levels; 15 skill badges in three families drive level, pay and routing</span></div>
       <div class="kpi" role="listitem"><span class="v">12 → 31</span><span class="l">facilities absorbed in two years without new teams</span></div>
       <div class="kpi" role="listitem"><span class="v">$328–400K</span><span class="l">saved a year by year two with Model C, against Model A</span></div>
     </div>
@@ -348,7 +357,7 @@
               <div class="team"><b>T1</b>Tier 1–3</div><div class="team"><b>T2</b>Tier 1–3</div><div class="team"><b>T3</b>Tier 1–3</div><div class="team"><b>T4</b>Tier 1–3</div><div class="team"><b>T5</b>Tier 1–3</div>
               <div class="team"><b>T6</b>Tier 1–3</div><div class="team"><b>T7</b>Tier 1–3</div><div class="team"><b>T8</b>Tier 1–3</div><div class="team"><b>T9</b>Tier 1–3</div><div class="team"><b>T10</b>Tier 1–3</div>
             </div>
-            <div class="node"><span class="pill">Opt-in</span><b>Bridge night rota</b><span>L2–L4 volunteers holding C2 · 2 per night, 16:00–24:00 Beirut · answers the US desk within 15 minutes</span></div>
+            <div class="node"><span class="pill">Opt-in</span><b>Bridge night rota</b><span>L2–L4 volunteers holding B2, led by an A2 holder · 2 per night, 16:00–24:00 Beirut · answers the US desk within 15 minutes</span></div>
           </div>
           <div class="org-col">
             <div class="node new"><span class="pill new">United States</span><b>US Gateway Desk</b><span>5 staff: 1 lead, 4 associates · copies each field from the IDR Prep Studio; no pricing decisions · +2 contract staff until Gate C1</span></div>
@@ -391,7 +400,7 @@
     <div class="head">
       <p class="eyebrow">Bridge night rota</p>
       <h2 id="rota">Volunteers cover the US day, paid from a fixed quarterly pool</h2>
-      <p>The night rota replaces the two team leads on the old bridge shift. Any L2, L3 or L4 holding C2 can opt in. It reports to the Onshore–Offshore Liaison portfolio owner.</p>
+      <p>The night rota replaces the two team leads on the old bridge shift. Any L2, L3 or L4 holding B2 (IDR Process Workflow) can opt in; each night's lead holds A2 (IDR Strategy). It reports to the Onshore–Offshore Liaison portfolio owner.</p>
     </div>
     <div class="grid-2">
       <div class="panel rota-facts">
@@ -502,30 +511,62 @@
   <section class="band" aria-labelledby="careers">
     <div class="head">
       <p class="eyebrow">People and careers</p>
-      <h2 id="careers">One role, five levels, earned by skill</h2>
-      <p>Former titles no longer set pay or work. Nine badges certify what each specialist can do alone, control what ClickUp routes to them, and open the next level. L1–L4 are specialist levels; L5 is leadership. Pay bands are USD per month.</p>
+      <h2 id="careers">One role, six levels, earned by skill</h2>
+      <p>Former titles no longer set pay or work. Fifteen badges in three families show what each specialist can do alone, control what ClickUp routes to them, and open the next level. L1 and L2 follow automatically from badges; L3, L4 and L5 need a leveling test. Pay bands are USD per month.</p>
     </div>
     <div class="ladder">
-      <div class="rung r1"><span class="lv">L1</span><b>RCM Specialist I</b><span class="pay">$1,000–1,300</span><span>Working toward the 5 core badges · QA 90%+ · Tier 3</span></div>
-      <div class="rung r2"><span class="lv">L2</span><b>RCM Specialist II</b><span class="pay">$1,200–1,550</span><span>All 5 core badges · QA 95%+, no missed deadlines · Tier 2</span></div>
-      <div class="rung r3"><span class="lv">L3</span><b>Senior Specialist I</b><span class="pay">$1,400–1,800</span><span>Core + 2 of A1, A2, A3 · top 40% Net Recovery · Tier 1</span></div>
-      <div class="rung r4"><span class="lv">L4</span><b>Senior Specialist II</b><span class="pay">$1,600–2,000</span><span>Core + A2, A4 and A1 or A3 · top 20% · specialty-group lead; teaches in the Academy</span></div>
-      <div class="rung r5"><span class="lv">L5</span><b>Principal · Leadership</b><span class="pay">TL $1,400–2,000<br>Mgr $2,000–3,000</span><span>Team Leads, Managers and the Senior Manager only</span></div>
+      <div class="rung r0"><span class="lv">L0</span><b>Junior RCM Specialist</b><span class="pay">$1,000–1,100</span><span>Newly recruited · no badges yet · no bonus</span></div>
+      <div class="rung r1"><span class="lv">L1</span><b>RCM Specialist I</b><span class="pay">$1,000–1,300</span><span>All 5 C badges · automatic · bonus 5%</span></div>
+      <div class="rung r2"><span class="lv">L2</span><b>RCM Specialist II</b><span class="pay">$1,200–1,550</span><span>5 C + B1 or B2 + 2 of B3, B4, B5 · automatic · bonus 8%</span></div>
+      <div class="rung r3"><span class="lv">L3</span><b>Senior Specialist I</b><span class="pay">$1,400–1,800</span><span>5 C + all 5 B + 1 A · L3 leveling test · Tier 1 · bonus 10%</span></div>
+      <div class="rung r4"><span class="lv">L4</span><b>Senior Specialist II</b><span class="pay">$1,600–2,000</span><span>5 C + all 5 B + 3 A · L4 leveling test · Tier 1 · specialty-group lead · bonus 12%</span></div>
+      <div class="rung r5"><span class="lv">L5</span><b>Principal · Leadership</b><span class="pay">TL $1,400–2,000<br>Mgr $2,000–3,000</span><span>5 C + all 5 B + 4 A · L5 leveling test · a team lead or manager post · bonus 12% / 15%</span></div>
     </div>
     <div class="panel" style="display:grid;gap:14px">
-      <h3>The nine badges</h3>
-      <div class="badges">
-        <div class="badge"><span class="code">C1</span>Claim follow-up</div>
-        <div class="badge"><span class="code">C2</span>Open Negotiation</div>
-        <div class="badge"><span class="code">C3</span>NNSA appeal</div>
-        <div class="badge"><span class="code">C4</span>Payment posting</div>
-        <div class="badge"><span class="code">C5</span>Medical-necessity report</div>
-        <div class="badge adv"><span class="code">A1</span>Coding (certified)</div>
-        <div class="badge adv"><span class="code">A2</span>IDR packet and offer</div>
-        <div class="badge adv"><span class="code">A3</span>MVA negotiation</div>
-        <div class="badge adv"><span class="code">A4</span>Payer strategy</div>
+      <h3>The 15 badges</h3>
+      <div class="fams">
+        <div class="fam">
+          <div class="fam-label"><b>C · Core</b><span>All five for L1</span></div>
+          <div class="badges">
+            <div class="badge"><span class="code">C1</span>Attaching Docs</div>
+            <div class="badge"><span class="code">C2</span>Claim Follow-up</div>
+            <div class="badge"><span class="code">C3</span>Appeal</div>
+            <div class="badge"><span class="code">C4</span>Payment Posting</div>
+            <div class="badge"><span class="code">C5</span>Medical-Necessity Report</div>
+          </div>
+        </div>
+        <div class="fam">
+          <div class="fam-label"><b>B · Specialist</b><span>Three for L2, all five for L3</span></div>
+          <div class="badges">
+            <div class="badge spec"><span class="code">B1</span>Coding</div>
+            <div class="badge spec"><span class="code">B2</span>IDR Process Workflow</div>
+            <div class="badge spec"><span class="code">B3</span>MVA and WComp Negotiation &amp; Process</div>
+            <div class="badge spec"><span class="code">B4</span>Payer Strategy</div>
+            <div class="badge spec"><span class="code">B5</span>Payer Outreach</div>
+          </div>
+        </div>
+        <div class="fam">
+          <div class="fam-label"><b>A · Advanced</b><span>1 for L3, 3 for L4, 4 for L5</span></div>
+          <div class="badges">
+            <div class="badge adv"><span class="code">A1</span>Reporting and Analysis</div>
+            <div class="badge adv"><span class="code">A2</span>IDR Strategy</div>
+            <div class="badge adv"><span class="code">A3</span>Medical Terminology</div>
+            <div class="badge adv"><span class="code">A4</span>Billing Strategy</div>
+            <div class="badge adv"><span class="code">A5</span>Innovation</div>
+          </div>
+        </div>
       </div>
-      <div class="lead-strip"><span class="muted">Leadership (L5):</span><span class="box">L3 or L4 + coaching assessment → <b>Team Lead</b> $1,400–2,000</span><span class="box">12 months as TL, or L4 + leadership training → <b>Manager</b> $2,000–3,000</span><span class="muted">Senior Manager band to be set.</span></div>
+      <p class="muted" style="font-size:13px">Each badge: Academy module, supervised production, then an assessment in a quarterly test window. Classroom time: C family 38 h, B family 64 h, A family 62 h. $50 a month for each A badge held, up to 2 ($100 a month).</p>
+      <div class="lead-strip"><span class="muted">Leadership (L5):</span><span class="box">L5 badge set + leveling test with a coaching assessment + a team lead post → <b>Team Lead</b> $1,400–2,000</span><span class="box">L5 badge set + leveling test with a leadership assessment + a manager post → <b>Manager</b> $2,000–3,000</span><span class="muted">Senior Manager band to be set.</span></div>
+    </div>
+    <div class="panel" style="display:grid;gap:14px">
+      <h3>How you move up</h3>
+      <div class="keep">
+        <div class="kp"><span class="v">L1 · L2</span><b>Automatic</b><span>At the next quarterly window after the badges are held. No minimum time in level.</span></div>
+        <div class="kp"><span class="v">L3 · L4 · L5</span><b>Leveling test</b><span>Case-based exam plus a 6-month review: QA 95%+ (L3) or 97%+ (L4, L5), zero missed deadlines.</span></div>
+        <div class="kp"><span class="v">Top 10%</span><b>Annual ranking</b><span>Each December, within each level. The top 10% earn the missing badges of their level; an L2 moves up to L3 without the test.</span></div>
+        <div class="kp"><span class="v">+5% to +15%</span><b>Guaranteed raise</b><span>L0→L1 +5%, L1→L2 +10%, L2→L3 and L3→L4 +12%, to Team Lead +8%, to Manager +15%, or the new band minimum if higher.</span></div>
+      </div>
     </div>
     <div class="panel" style="display:grid;gap:14px">
       <h3>Keep your badges</h3>
@@ -535,7 +576,19 @@
         <div class="kp warn"><span class="v">Lose 25%</span><b>Probation and coaching</b><span>90 days: written plan, full review of the affected work, re-test in the next window.</span></div>
         <div class="kp crit"><span class="v">Lose 50%</span><b>Termination</b><span>Through the HR process, with documented reviews and one appeal.</span></div>
       </div>
-      <p class="muted" style="font-size:13px">Counted against badges held at the start of the half-year. The June 2027 review is coaching only; consequences start with the December 2027 review. Subject to HR and legal review under Lebanese labor law before publication.</p>
+      <div class="scroll">
+        <table class="rota counts">
+          <thead><tr><th>Level</th><th>Badges held</th><th>Probation at</th><th>Termination at</th></tr></thead>
+          <tbody>
+            <tr><td>L1</td><td class="num">5</td><td class="num">2 lost</td><td class="num">3 lost</td></tr>
+            <tr><td>L2</td><td class="num">8</td><td class="num">2 lost</td><td class="num">4 lost</td></tr>
+            <tr><td>L3</td><td class="num">11</td><td class="num">3 lost</td><td class="num">6 lost</td></tr>
+            <tr><td>L4</td><td class="num">13</td><td class="num">4 lost</td><td class="num">7 lost</td></tr>
+            <tr><td>L5</td><td class="num">14</td><td class="num">4 lost</td><td class="num">7 lost</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="font-size:13px">Counted against badges held at the start of the half-year, rounded up. The June 2027 review is coaching only; consequences start with the December 2027 review. Subject to HR and legal review under Lebanese labor law before publication.</p>
     </div>
   </section>
 
@@ -553,9 +606,10 @@
           <b>Badges earned automatically</b>
           <p>No tests. Confirmed at their default level with the badges of their current role.</p>
           <ul>
-            <li>Negotiator: C2, A2, C5</li>
-            <li>Coder: A1 (if certified), C5</li>
-            <li>Biller: C1, C3, C4, C5; A3 for MVA settlements</li>
+            <li>Negotiator: C2, C5, B2, B5, A2</li>
+            <li>Coder: C1, C5, B1, A3</li>
+            <li>Biller: C1, C2, C3, C4, B5; B3 for MVA or workers' comp</li>
+            <li>Senior: the role badges of their specialty</li>
           </ul>
         </div>
         <div class="seg" style="padding-top:12px">
@@ -571,7 +625,7 @@
         <div class="seg b" style="padding-top:12px">
           <span class="big" style="color:var(--warn)">Bottom 10%</span>
           <b>L1 and the Academy</b>
-          <p>Enrolled in the Academy and placed at L1. Can sit the skill assessment in any test window to return to L2.</p>
+          <p>Enrolled in the Academy and placed at L1. They return to L2 automatically once they hold the L2 badges.</p>
         </div>
       </div>
     </div>
@@ -580,23 +634,24 @@
         <h3>Default level by current role</h3>
         <div class="dl"><span>Seniors</span><span class="num">L3 Senior Specialist I</span></div>
         <div class="dl"><span>Negotiators, Coders, Billers</span><span class="num">L2 RCM Specialist II</span></div>
-        <div class="dl"><span>Team Leads</span><span class="num">L5 Team Lead</span></div>
-        <div class="dl"><span>Managers</span><span class="num">L5 Manager</span></div>
+        <div class="dl"><span>Team Leads</span><span class="num">Keep their post at L5</span></div>
+        <div class="dl"><span>Managers</span><span class="num">Keep their post at L5</span></div>
+        <p class="muted" style="font-size:13px">Missing badges for the confirmed level are earned through cross-training by December 31, 2027; the level is held provisionally until then. Team leads and managers have until the same date to complete the L5 badge set, with Academy support.</p>
       </div>
       <div class="panel" style="display:grid;gap:12px;align-content:start">
         <h3>Pay during the transition</h3>
         <div class="keep" style="grid-template-columns:repeat(2,minmax(0,1fr))">
           <div class="kp"><span class="v">No pay cuts</span><span>Including anyone moved down a level. Above-band pay is frozen; merit is paid as a lump sum.</span></div>
-          <div class="kp"><span class="v">Raise on upgrade</span><span>Guaranteed from April 1, 2027: +10–12% or the new band minimum, whichever is higher.</span></div>
+          <div class="kp"><span class="v">Raise on every move up</span><span>Guaranteed from April 1, 2027, at the standard rate or the new band minimum, whichever is higher.</span></div>
         </div>
       </div>
     </div>
     <div class="panel steps5">
       <div class="pstep"><span class="when">Dec 2026</span><b>Rank</b><span class="muted" style="font-size:12px">Top and bottom 10% published</span></div>
       <div class="pstep"><span class="when">Jan 2027</span><b>Skill assessment</b><span class="muted" style="font-size:12px">Optional; shows needs and level</span></div>
-      <div class="pstep"><span class="when">Feb–Mar 2027</span><b>Test windows</b><span class="muted" style="font-size:12px">Role badges, core and advanced</span></div>
+      <div class="pstep"><span class="when">Feb–Mar 2027</span><b>Test windows</b><span class="muted" style="font-size:12px">Role badges: core, specialist and advanced</span></div>
       <div class="pstep"><span class="when">Apr 1, 2027</span><b>Levels take effect</b><span class="muted" style="font-size:12px">Raises paid on upgrades</span></div>
-      <div class="pstep"><span class="when">Jun 30, 2027</span><b>Core badges</b><span class="muted" style="font-size:12px">Missing ones earned by cross-training</span></div>
+      <div class="pstep"><span class="when">Dec 31, 2027</span><b>Full badge sets</b><span class="muted" style="font-size:12px">Missing badges earned by cross-training</span></div>
     </div>
     <div class="promise">
       <span class="eyebrow">Our commitment</span>
@@ -607,7 +662,7 @@
   <section class="band" aria-labelledby="academy">
     <div class="head">
       <p class="eyebrow">Training Academy</p>
-      <h2 id="academy">A new hire becomes a full account owner in six months</h2>
+      <h2 id="academy">A new hire holds all five core badges in six months</h2>
       <p>Training happens on live work: about 20% classroom, 80% supervised production checked by a badge-holder. A committee awards badges and recommends promotions; no one decides alone on their own team. Each Badge Panel is a QA reviewer plus 2 assessors (L4s or Team Leads) from other teams.</p>
     </div>
     <div class="grid-2">
@@ -622,15 +677,15 @@
       <div class="panel" style="display:grid;gap:14px;align-content:start">
         <h3>From day one to L2</h3>
         <div class="path">
-          <div class="pstep"><span class="when">Weeks 1–2</span><b>Onboarding</b><span class="muted" style="font-size:12px">HIPAA, systems, NSA</span></div>
-          <div class="pstep"><span class="when">Months 1–2</span><b>C1 + C4</b><span class="muted" style="font-size:12px">Follow-up, posting</span></div>
-          <div class="pstep"><span class="when">Month 3</span><b>C5</b><span class="muted" style="font-size:12px">Medical necessity</span></div>
-          <div class="pstep"><span class="when">Months 4–5</span><b>C2</b><span class="muted" style="font-size:12px">Open Negotiation</span></div>
-          <div class="pstep"><span class="when">Month 6</span><b>C3</b><span class="muted" style="font-size:12px">NNSA appeal</span></div>
-          <div class="pstep"><span class="when">Next window</span><b>L2</b><span class="muted" style="font-size:12px">Account owner</span></div>
+          <div class="pstep"><span class="when">Weeks 1–2</span><b>L0 onboarding</b><span class="muted" style="font-size:12px">HIPAA, systems, NSA</span></div>
+          <div class="pstep"><span class="when">Months 1–2</span><b>C1 + C4</b><span class="muted" style="font-size:12px">Attaching docs, posting</span></div>
+          <div class="pstep"><span class="when">Months 3–4</span><b>C2 + C5</b><span class="muted" style="font-size:12px">Follow-up, medical necessity</span></div>
+          <div class="pstep"><span class="when">Months 5–6</span><b>C3</b><span class="muted" style="font-size:12px">Appeal</span></div>
+          <div class="pstep"><span class="when">Next window</span><b>L1, automatic</b><span class="muted" style="font-size:12px">All five core badges</span></div>
+          <div class="pstep"><span class="when">6–12 months later</span><b>L2, automatic</b><span class="muted" style="font-size:12px">B1 or B2 + 2 of B3, B4, B5</span></div>
         </div>
         <div class="facts">
-          <div class="fact"><span class="v">100%</span><span class="l">core badges held by June 30, 2027</span></div>
+          <div class="fact"><span class="v">Dec 2027</span><span class="l">full badge set for every confirmed level</span></div>
           <div class="fact"><span class="v">2+</span><span class="l">holders of every badge in every team</span></div>
           <div class="fact"><span class="v">4×</span><span class="l">test windows a year, every badge offered</span></div>
         </div>
@@ -645,7 +700,7 @@
       <p>Eleven portfolios, one per manager and the Senior Manager. Owners are assigned by the leadership board. Dashed tiles are additions the model needs to succeed.</p>
     </div>
     <div class="ports">
-      <div class="port"><span class="k">Training Academy</span><b>Onboard, train, test, award, promote</b><span>Core badges for all by June 30, 2027</span></div>
+      <div class="port"><span class="k">Training Academy</span><b>Onboard, train, test, award, promote</b><span>Every level's badge set held by Dec 31, 2027</span></div>
       <div class="port"><span class="k">Payments and Reconciliation</span><b>Every dollar posted and reconciled</b><span>IDR awards matched in 2 business days</span></div>
       <div class="port"><span class="k">Onshore–Offshore Liaison</span><b>Lebanon, US desk, night rota, accounting</b><span>98% same-day completion</span></div>
       <div class="port"><span class="k">External Relations</span><b>IDR entities and payers</b><span>80% of escalations resolved in 30 days</span></div>
@@ -679,8 +734,8 @@
           <div class="ph"><span class="when">Nov 2026</span><b>Build and train</b><span>Studio tested; ticket workflow live by Nov 21</span></div>
           <div class="ph"><span class="when">Dec 2026</span><b>Parallel run</b><span>All Gateway work through the Studio; KPI ranking</span></div>
           <div class="ph"><span class="when">Jan–Mar 2027</span><b>Launch and transition</b><span>10 teams live; skill assessment; badge tests</span></div>
-          <div class="ph"><span class="when">Apr–Jun 2027</span><b>Levels live</b><span>Levels from April 1; everyone earns the 5 core badges</span></div>
-          <div class="ph"><span class="when">Jul 2027–2028</span><b>Full cycle and growth</b><span>Advanced badges; 19 facilities join existing teams</span></div>
+          <div class="ph"><span class="when">Apr–Jun 2027</span><b>Levels live</b><span>Levels from April 1; cross-training on the badge sets</span></div>
+          <div class="ph"><span class="when">Jul 2027–2028</span><b>Full cycle and growth</b><span>Full badge sets by Dec 31, 2027; 19 facilities join existing teams</span></div>
         </div>
         <div class="tl-track"></div>
         <div class="gates">
@@ -688,8 +743,8 @@
           <div class="gate crit"><span class="dia"></span><span class="d">Jan 1, 2027</span><b>Gateway US-only</b><span>Hard regulatory deadline</span></div>
           <div class="gate b"><span class="dia"></span><span class="d">Mar 15</span><b>Gate C1</b><span>≤15 min per dispute, errors under 0.5%, no missed deadline for 4 weeks → desk steps down to 5</span></div>
           <div class="gate"><span class="dia"></span><span class="d">Apr 1</span><b>Levels take effect</b><span>Raises paid on upgrades; no pay cuts</span></div>
-          <div class="gate"><span class="dia"></span><span class="d">Jun 30</span><b>Core badges</b><span>All core badges held; first review is coaching only</span></div>
-          <div class="gate"><span class="dia"></span><span class="d">Dec 2027</span><b>First badge-loss review</b><span>Same standards for everyone from here</span></div>
+          <div class="gate"><span class="dia"></span><span class="d">Jun 30</span><b>First KPI review</b><span>Coaching only; no badge loss</span></div>
+          <div class="gate"><span class="dia"></span><span class="d">Dec 31, 2027</span><b>Badge sets due</b><span>First badge-loss review; same standards for everyone from here</span></div>
           <div class="gate"><span class="dia"></span><span class="d">Jan 2028</span><b>Retention paid out</b><span>Critical staff retained through the change</span></div>
         </div>
       </div>
@@ -703,10 +758,9 @@
         <p class="eyebrow">Risks we are managing</p>
         <h2 id="risk" style="font-size:22px;margin-bottom:6px">Every major risk has an owner and a fallback</h2>
         <div class="risk"><b>We misread the Gateway's onshore rule</b><span class="pill crit">High impact</span><p>Legal sign-off before the build; offshore access stays as a fallback until December 19.</p></div>
-        <div class="risk"><b>Patient data in Google Workspace without a HIPAA BAA</b><span class="pill crit">High impact</span><p>The Studio runs on Google Workspace. A signed BAA must cover it before any real PHI enters the Studio.</p></div>
         <div class="risk"><b>Copy errors at the US desk</b><span class="pill warn">Model C</span><p>Studio validates every field; per-field checklist; night rota review. Gate C1 requires errors under 0.5%.</p></div>
         <div class="risk"><b>The US desk falls behind as volume grows</b><span class="pill warn">Medium</span><p>Contract staff stay until Gate C1; a backlog trigger extends them or adds staff.</p></div>
-        <div class="risk"><b>People read new levels as a demotion</b><span class="pill warn">Medium</span><p>Default levels, no pay cuts, a guaranteed raise on upgrade, published criteria and one appeal.</p></div>
+        <div class="risk"><b>People read new levels as a demotion</b><span class="pill warn">Medium</span><p>Default levels, no pay cuts, a guaranteed raise on every move up, published criteria and one appeal.</p></div>
         <div class="risk"><b>We lose IDR experts during the change</b><span class="pill crit">High impact</span><p>Retention bonus through January 2028 and an L4 path that does not require managing.</p></div>
       </div>
       <div class="panel" style="display:grid;gap:14px;align-content:start">
@@ -715,10 +769,10 @@
         <div class="decide">
           <div class="dec"><div><b>Approve Model C for the US Gateway Desk</b><span>5 permanent staff (1 lead, 4 associates) plus 2 contract staff until Gate C1, hired in-house from October</span></div></div>
           <div class="dec"><div><b>Approve the 10 full-cycle teams</b><span>Launch in January–February 2027, after the Gateway cutover</span></div></div>
-          <div class="dec"><div><b>Approve levels L1–L5, badges and pay bands</b><span>Including L4 Senior Specialist II and L5 Principal as the leadership level</span></div></div>
+          <div class="dec"><div><b>Approve levels L0–L5, the 15 badges and pay bands</b><span>Automatic L1 and L2, leveling tests for L3–L5, $50 per A badge (up to 2)</span></div></div>
           <div class="dec"><div><b>Approve the testing and badge-loss policy</b><span>Quarterly tests, semiannual review; subject to HR and legal review</span></div></div>
           <div class="dec"><div><b>Approve the transition plan</b><span>Ranking in December, tests January–March, levels effective April 1, 2027</span></div></div>
-          <div class="dec"><div><b>Approve the bridge night rota</b><span>Opt-in L2–L4; a $30,000 bonus pool each quarter</span></div></div>
+          <div class="dec"><div><b>Approve the bridge night rota</b><span>Opt-in L2–L4 holding B2, A2 night lead; a $30,000 bonus pool each quarter</span></div></div>
           <div class="dec"><div><b>Create the Senior Manager role and the portfolios</b><span>Senior Manager (L5) in place before the Academy set-up</span></div></div>
         </div>
       </div>
