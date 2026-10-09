@@ -1196,9 +1196,9 @@
             <div class="kpis">
                 <div class="kpi"><div class="num">3</div><div class="label">US staff instead of 7</div></div>
                 <div class="kpi"><div class="num">~10<span class="unit"> min</span></div><div class="label">US filing time per dispute, down from about 47</div></div>
-                <div class="kpi"><div class="num gain">$140–215K</div><div class="label">Saved per year at today's volume</div></div>
-                <div class="kpi"><div class="num gain">$0.45–0.7M</div><div class="label">Saved per year by year two</div></div>
-                <div class="kpi"><div class="num">4–9<span class="unit"> mo</span></div><div class="label">Payback after stepping down to 3</div></div>
+                <div class="kpi"><div class="num gain">$140–160K</div><div class="label">Saved per year at today's volume</div></div>
+                <div class="kpi"><div class="num gain">$0.41–0.5M</div><div class="label">Saved per year by year two</div></div>
+                <div class="kpi"><div class="num">$0</div><div class="label">Recruiting fees or new infrastructure: hiring is in-house, systems already exist</div></div>
             </div>
         </div>
     </header>
@@ -1268,7 +1268,7 @@
                 </div>
                 <div class="lane us">
                     <div class="lane-title">United States</div>
-                    <div class="fstep"><b>4 · Operator opens the bundle</b><span>Submission Cockpit on a US company laptop</span></div>
+                    <div class="fstep"><b>4 · Operator opens the bundle</b><span>Submission Cockpit on a US company device</span></div>
                     <div class="fdown" aria-hidden="true">↓</div>
                     <div class="fstep"><b>5 · Form filler fills, operator checks</b><span>Every field reviewed; the operator clicks submit</span></div>
                     <div class="fdown" aria-hidden="true">↓</div>
@@ -1409,7 +1409,7 @@
             <div class="section-head">
                 <p class="eyebrow">Schedule</p>
                 <h2>One 24-hour loop: Lebanon prepares, the US files, results wait by morning</h2>
-                <p>Shown in Beirut time, with Central time underneath; the offset is 8 hours for most of the year. At least 2 of the 3 US staff work every weekday, and 2 trained agency temps are on call.</p>
+                <p>Shown in Beirut time, with Central time underneath; the offset is 8 hours for most of the year. At least 2 of the 3 US staff work every weekday, and 2 trained on-call staff, recruited in-house, cover sickness.</p>
             </div>
             <div class="card">
                 <div class="gantt">
@@ -1440,7 +1440,7 @@
                 <p>Base pay bands are unchanged from Model A. Everything below is new, and each item has a guardrail.</p>
             </div>
             <div class="pay-grid">
-                <div class="pay-card"><b>US package</b><span>Direct hire, health benefits, 15 days' paid leave, remote work on a company laptop</span><em>Guardrail: US-only devices and network; session recording on</em></div>
+                <div class="pay-card"><b>US package</b><span>Direct hire, health benefits, 15 days' paid leave, remote work on an existing company device</span><em>Guardrail: US-only devices and network; session recording on</em></div>
                 <div class="pay-card gain-card"><b>US quarterly bonus · up to 10%</b><span>Same-day completion, error rate, backlog</span><em>Guardrail: nothing paid in a quarter with a filing error that cost a deadline</em></div>
                 <div class="pay-card gain-card"><b>Team gainshare · 3% of uplift</b><span>3% of the team's Net Recovery above its baseline quarter, split by work units × quality</span><em>Guardrail: capped at 15% of quarterly base; each missed deadline cuts 25%; coding never paid on dollars</em></div>
                 <div class="pay-card gain-card"><b>Bounty board · $3 per unit</b><span>Claims over 90 days old, closed outside regular work</span><em>Guardrail: up to $150 a month; quality of 95% or higher</em></div>
@@ -1453,21 +1453,20 @@
         <section class="block" id="tools">
             <div class="section-head">
                 <p class="eyebrow">Tools and technology</p>
-                <h2>One new build; everything else is configured or bought</h2>
-                <p>Model A's ClickUp ticket workflow and deadline engine stay underneath as the fallback.</p>
+                <h2>One new build, made in-house; everything else runs on what we already have</h2>
+                <p>The Cockpit is built on our existing Google Workspace, starting from the IDR Prep Studio. Model A's ClickUp ticket workflow and deadline engine stay underneath as the fallback.</p>
             </div>
             <div class="table-wrap">
                 <table class="data">
                     <thead><tr><th>Tool</th><th>What it does</th><th>Type</th><th>Estimated cost (USD)</th><th>Ready</th></tr></thead>
                     <tbody>
-                        <tr><td><b>Submission Cockpit</b></td><td>US-hosted app with sign-on and MFA: bundle queue, checklists, audit log</td><td>Build</td><td>50,000–90,000 once; ~12,000/year</td><td>Feb 2027</td></tr>
-                        <tr><td><b>Form filler</b></td><td>Operator-started browser extension; fills the page, never submits by itself</td><td>Build</td><td>Included</td><td>Feb 2027, if allowed</td></tr>
+                        <tr><td><b>Submission Cockpit</b></td><td>US-hosted app with sign-on and MFA: bundle queue, checklists, audit log</td><td>Build in-house</td><td>Staff time; existing systems</td><td>Feb 2027</td></tr>
+                        <tr><td><b>Form filler</b></td><td>Operator-started browser extension on the US desk's company devices; fills the page, never submits by itself</td><td>Build in-house</td><td>Included</td><td>Feb 2027, if allowed</td></tr>
                         <tr><td><b>Bundle builder</b></td><td>ClickUp form for each action, plus automatic PDF assembly</td><td>Configure</td><td>Staff time</td><td>Jan 2027</td></tr>
                         <tr><td><b>AI drafting</b></td><td>Packets, medical-necessity reports, offer letters for approval</td><td>Buy, with BAA</td><td>12,000–30,000/year</td><td>Jan 2027</td></tr>
-                        <tr><td><b>AI determination reader</b></td><td>Turns determination PDFs into ClickUp fields overnight</td><td>Build</td><td>Included</td><td>Mar 2027</td></tr>
-                        <tr><td><b>US device security</b></td><td>Laptops, device management, screen recording, US-only network</td><td>Buy</td><td>~5,000 once; ~3,000/year</td><td>Dec 2026</td></tr>
+                        <tr><td><b>AI determination reader</b></td><td>Turns determination PDFs into ClickUp fields overnight</td><td>Build in-house</td><td>Included</td><td>Mar 2027</td></tr>
+                        <tr><td><b>US device security</b></td><td>Device management, screen recording, US-only network on existing devices</td><td>Configure</td><td>Staff time</td><td>Dec 2026</td></tr>
                         <tr><td><b>Dashboards</b></td><td>Net Recovery, gainshare, bounty board, US queue</td><td>Configure</td><td>Low</td><td>Feb 2027</td></tr>
-                        <tr><td><b>ClickUp Enterprise + BAA</b></td><td>System of record</td><td>Buy</td><td>[Vendor quote]</td><td>Dec 2026</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1477,14 +1476,14 @@
         <section class="block" id="cost">
             <div class="section-head">
                 <p class="eyebrow">Cost</p>
-                <h2>Model B costs about half as much onshore, and the gap widens with growth</h2>
-                <p>Midpoints shown; ranges beside each bar. US figures are approximate Texas market rates, not quotes. One-time cost: $65,000–120,000 for Model B against about $10,500 for Model A.</p>
+                <h2>Model B costs 40–50% less onshore, and the gap widens with growth</h2>
+                <p>Midpoints shown; ranges beside each bar. US figures are approximate Texas market rates for direct hires, plus 25% for benefits and payroll taxes, not quotes. No recruiting fees or infrastructure costs: hiring is in-house and both models run on existing systems. Model B's only extra one-time item is a legal review of the Cockpit (quote needed).</p>
             </div>
             <div class="card">
                 <div class="cost-rows" id="cost-rows"></div>
                 <div class="legend">
-                    <span><i style="background:var(--neutral-slate)"></i>Model A (agency US desk)</span>
-                    <span><i style="background:var(--primary-cyan)"></i>Model B (3-person desk + technology)</span>
+                    <span><i style="background:var(--neutral-slate)"></i>Model A (7-person US desk, direct hire)</span>
+                    <span><i style="background:var(--primary-cyan)"></i>Model B (3-person desk + AI drafting)</span>
                     <span><i style="background:var(--success-green)"></i>Annual saving</span>
                 </div>
             </div>
@@ -1497,7 +1496,7 @@
                 <h2>Earned in stages; January 1 never depends on new software</h2>
             </div>
             <div class="stages">
-                <div class="stage"><div class="when">Oct–Dec 2026</div><h4>Model A, with an exit option</h4><p>7-person US desk on 3–6 month contracts; legal and Gateway terms check; Cockpit build starts</p><span class="gate">Gate 0 · Nov 30: legal and terms both yes</span></div>
+                <div class="stage"><div class="when">Oct–Dec 2026</div><h4>Model A, with an exit option</h4><p>7-person US desk hired in-house on 3–6 month contracts; legal and Gateway terms check; Cockpit build starts</p><span class="gate">Gate 0 · Nov 30: legal and terms both yes</span></div>
                 <div class="stage"><div class="when">Jan 1, 2027</div><h4>Gateway goes US-only</h4><p>Filed by Model A's desk</p><span class="gate critical">Hard regulatory deadline</span></div>
                 <div class="stage"><div class="when">Feb–Mar 2027</div><h4>Cockpit pilot</h4><p>20%, then 50% of volume, timed against manual entry</p><span class="gate">Gate 1 · Mar 15: ≤12 min, &lt;0.5% errors, 98% first pass, no missed deadlines</span></div>
                 <div class="stage"><div class="when">Mar–Apr 2027</div><h4>Step down to 3</h4><p>Hire the 3 permanent staff; let contracts end one at a time</p><span class="gate">Gate 2 · Apr 30: 4 weeks with backlog under 1 day</span></div>
@@ -1511,7 +1510,7 @@
                     <span>The error rate stays above 1% for 2 weeks</span>
                     <span>The Gateway changes its terms or blocks the form filler</span>
                 </div>
-                <p>The way back is always ready: the agency supplies 4 trained people within 2 weeks, and the manual ticket flow stays live.</p>
+                <p>The way back is always ready: in-house recruiting keeps a bench of pre-screened candidates so 4 trained people can start within 2 weeks, and the manual ticket flow stays live.</p>
             </div>
         </section>
 
@@ -1526,7 +1525,7 @@
                     <thead><tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Response</th></tr></thead>
                     <tbody>
                         <tr><td>Gateway terms forbid the form filler</td><td><span class="lvl m">Medium</span></td><td><span class="lvl h">High</span></td><td>Gate 0 checks first; fall back to Model A staffing</td></tr>
-                        <tr><td>One US absence cuts capacity by a third</td><td><span class="lvl h">High</span></td><td><span class="lvl h">High</span></td><td>2 on-call temps; leave rules; backlog kill switch</td></tr>
+                        <tr><td>One US absence cuts capacity by a third</td><td><span class="lvl h">High</span></td><td><span class="lvl h">High</span></td><td>2 trained on-call staff; leave rules; backlog kill switch</td></tr>
                         <tr><td>A Gateway screen change breaks the Cockpit's field mapping</td><td><span class="lvl m">Medium</span></td><td><span class="lvl m">Medium</span></td><td>Mapping fixed within 1 day; manual entry always available</td></tr>
                         <tr><td>AI drafts contain errors</td><td><span class="lvl m">Medium</span></td><td><span class="lvl h">High</span></td><td>Every draft approved by a specialist; weekly QA sample</td></tr>
                         <tr><td>Gainshare pushes aggressive settlements</td><td><span class="lvl l">Low</span></td><td><span class="lvl m">Medium</span></td><td>Cap, quality multiplier, unchanged decision rights</td></tr>
@@ -1574,11 +1573,11 @@
 
                 // Cost comparison: annual cost in $K, low/high per model
                 var cost = [
-                    { label: 'Today', a: [360, 490], b: [221, 276], save: '$140–215K' },
-                    { label: 'Year 1', a: [620, 840], b: [345, 420], save: '$275–420K' },
-                    { label: 'Year 2', a: [930, 1260], b: [485, 570], save: '$445–690K' }
+                    { label: 'Today', a: [346, 421], b: [206, 261], save: '$140–160K' },
+                    { label: 'Year 1', a: [580, 707], b: [331, 408], save: '$249–299K' },
+                    { label: 'Year 2', a: [861, 1050], b: [452, 551], save: '$409–499K' }
                 ];
-                var max = 1260;
+                var max = 1250;
                 var rows = document.getElementById('cost-rows');
                 cost.forEach(function (c) {
                     var midA = (c.a[0] + c.a[1]) / 2, midB = (c.b[0] + c.b[1]) / 2;
