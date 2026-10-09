@@ -1,0 +1,577 @@
+<title>ER OON Operating Model 2027</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* Layout: an executive briefing read top to bottom; each band answers one board question, wide diagrams scroll inside their own frame. */
+  :root {
+    --navy: #003B5C;
+    --cyan: #00A3E0;
+    --ink: #0F2233;
+    --ink-2: #4A5B6B;
+    --line: #D6E0E8;
+    --bg: #F6F9FB;
+    --panel: #FFFFFF;
+    --tint: #E6F5FC;
+    --navy-fill: #003B5C;
+    --on-navy: #FFFFFF;
+    --on-navy-2: #B9D3E3;
+    --good: #0E9F6E;
+    --good-tint: #E3F6EE;
+    --warn: #B7791F;
+    --warn-tint: #FDF3DE;
+    --crit: #D3232B;
+    --crit-tint: #FCE8E9;
+    --bar-a: #8FA3B4;
+    --bar-b: #00A3E0;
+    --font-display: 'Inter', 'Segoe UI', Arial, sans-serif;
+    --font-body: 'Inter', 'Segoe UI', Arial, sans-serif;
+    --font-data: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --navy: #7CC8EC; --cyan: #33B8EA; --ink: #E7EEF4; --ink-2: #A5B5C3; --line: #24384A;
+      --bg: #0B1722; --panel: #112231; --tint: #10303F; --navy-fill: #0F3550; --on-navy: #FFFFFF; --on-navy-2: #A8C6D8;
+      --good: #3CCB94; --good-tint: #0F3328; --warn: #E8B04F; --warn-tint: #3A2C10; --crit: #FF6B70; --crit-tint: #3D1518;
+      --bar-a: #5F7385; --bar-b: #33B8EA; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --navy: #7CC8EC; --cyan: #33B8EA; --ink: #E7EEF4; --ink-2: #A5B5C3; --line: #24384A;
+    --bg: #0B1722; --panel: #112231; --tint: #10303F; --navy-fill: #0F3550; --on-navy: #FFFFFF; --on-navy-2: #A8C6D8;
+    --good: #3CCB94; --good-tint: #0F3328; --warn: #E8B04F; --warn-tint: #3A2C10; --crit: #FF6B70; --crit-tint: #3D1518;
+    --bar-a: #5F7385; --bar-b: #33B8EA; color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding-inline: 20px; padding-block: 0 56px; }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 26px; font-weight: 800; color: var(--ink); }
+  h3 { font-size: 16px; font-weight: 700; }
+  p { margin: 0; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan); }
+  .muted { color: var(--ink-2); }
+  .num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+  /* ---------- hero */
+  .hero { background: var(--navy-fill); color: var(--on-navy); padding-block: 40px 36px; }
+  .hero .wrap { padding-block: 0; display: grid; gap: 28px; }
+  .hero .eyebrow { color: #6FD0F5; }
+  .hero h1 { font-size: clamp(30px, 5vw, 48px); font-weight: 800; line-height: 1.08; max-width: 20ch; }
+  .hero .lead { font-size: 18px; color: var(--on-navy-2); max-width: 62ch; }
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: rgba(255,255,255,0.18); border-radius: 12px; overflow: hidden; }
+  .kpi { background: var(--navy-fill); padding: 16px 18px; display: grid; gap: 4px; align-content: start; }
+  .kpi .v { font-family: var(--font-data); font-size: 26px; font-weight: 600; color: #FFFFFF; }
+  .kpi .l { font-size: 13px; color: var(--on-navy-2); }
+  .tag { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--on-navy-2); }
+  .tag i { width: 8px; height: 8px; border-radius: 50%; background: #FF6B70; display: inline-block; }
+
+  /* ---------- bands */
+  section.band { padding-block: 44px 0; display: grid; gap: 20px; }
+  .head { display: grid; gap: 8px; max-width: 72ch; }
+  .head p { color: var(--ink-2); font-size: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+
+  .pressure { display: grid; gap: 8px; }
+  .pressure .big { font-family: var(--font-data); font-size: 30px; font-weight: 600; color: var(--navy); }
+  .pressure p { color: var(--ink-2); }
+
+  /* ---------- org chart */
+  .scroll { overflow-x: auto; }
+  .org { min-width: 900px; display: grid; gap: 0; justify-items: center; padding-block: 8px; }
+  .node { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 12px 14px; text-align: center; display: grid; gap: 2px; }
+  .node b { font-size: 14px; }
+  .node span { font-size: 12px; color: var(--ink-2); }
+  .node.top { background: var(--navy-fill); border-color: var(--navy-fill); color: var(--on-navy); min-width: 340px; }
+  .node.top span { color: var(--on-navy-2); }
+  .node.new { border: 2px solid var(--cyan); }
+  .node.new .pill { justify-self: center; }
+  .vline { width: 2px; height: 22px; background: var(--line); }
+  .org-row { position: relative; display: grid; grid-template-columns: 1.1fr 2.4fr 1.1fr 1fr; gap: 14px; width: 100%; padding-top: 22px; }
+  .org-row::before { content: ''; position: absolute; top: 0; left: 12%; right: 11%; height: 2px; background: var(--line); }
+  .org-col { position: relative; display: grid; gap: 10px; align-content: start; }
+  .org-col::before { content: ''; position: absolute; top: -22px; left: 50%; width: 2px; height: 22px; background: var(--line); }
+  .teams { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .team { border: 1px solid var(--line); border-radius: 8px; padding: 8px 4px; text-align: center; font-size: 12px; background: var(--tint); }
+  .team b { display: block; font-family: var(--font-data); font-size: 13px; color: var(--navy); }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: var(--tint); color: var(--navy); }
+  .pill.new { background: var(--cyan); color: #FFFFFF; }
+  .pill.good { background: var(--good-tint); color: var(--good); }
+  .pill.warn { background: var(--warn-tint); color: var(--warn); }
+  .pill.crit { background: var(--crit-tint); color: var(--crit); }
+
+  /* ---------- flow */
+  .flow { min-width: 900px; display: grid; grid-template-columns: 1fr 70px 1fr; gap: 0; align-items: stretch; }
+  .lane { display: grid; gap: 10px; align-content: start; }
+  .lane h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 8px; border-bottom: 2px solid var(--line); }
+  .lane h3 small { font-family: var(--font-data); font-size: 12px; font-weight: 500; color: var(--ink-2); }
+  .step { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .step .n { font-family: var(--font-data); font-size: 13px; font-weight: 600; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--tint); color: var(--navy); }
+  .step b { font-size: 14px; display: block; }
+  .step span { font-size: 13px; color: var(--ink-2); }
+  .bridge { display: grid; align-content: center; justify-items: center; gap: 6px; color: var(--ink-2); font-size: 11px; text-align: center; }
+  .bridge .arrow { font-family: var(--font-data); font-size: 22px; color: var(--cyan); line-height: 1; }
+  .rule { margin-top: 12px; display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-2); }
+
+  /* ---------- models */
+  .model { display: grid; gap: 12px; }
+  .model .top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .model h3 { font-size: 20px; }
+  .model ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink); }
+  .model li span { color: var(--ink-2); }
+  .model.b { border-color: var(--cyan); }
+  .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .fact { border-top: 2px solid var(--line); padding-top: 8px; display: grid; gap: 2px; }
+  .fact .v { font-family: var(--font-data); font-size: 20px; font-weight: 600; color: var(--navy); }
+  .fact .l { font-size: 12px; color: var(--ink-2); }
+
+  .cost { display: grid; gap: 18px; }
+  .crow { display: grid; grid-template-columns: 76px minmax(0, 1fr) 128px; gap: 14px; align-items: center; }
+  .crow .lbl { font-weight: 700; font-size: 14px; }
+  .bars { display: grid; gap: 6px; }
+  .bar { position: relative; height: 22px; }
+  .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+  .bar .rng { position: absolute; top: 10px; height: 2px; background: var(--ink-2); }
+  .bar .rng::before, .bar .rng::after { content: ''; position: absolute; top: -5px; width: 2px; height: 12px; background: var(--ink-2); }
+  .bar .rng::before { left: 0; } .bar .rng::after { right: 0; }
+  .bar .txt { position: absolute; top: 2px; font-family: var(--font-data); font-size: 12px; color: var(--ink); white-space: nowrap; }
+  .fill.a { background: var(--bar-a); } .fill.b { background: var(--bar-b); }
+  .save { background: var(--good-tint); color: var(--good); border-radius: 8px; padding: 8px 10px; display: grid; gap: 0; }
+  .save b { font-family: var(--font-data); font-size: 16px; }
+  .save span { font-size: 11px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--ink-2); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+  table.cmp th, table.cmp td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.cmp th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 700; }
+  table.cmp td:first-child { font-weight: 600; }
+  .edge { font-weight: 700; font-size: 12px; }
+  .edge.a { color: var(--ink-2); } .edge.b { color: var(--cyan); }
+
+  /* ---------- careers */
+  .ladder { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
+  .rung { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px; display: grid; gap: 6px; }
+  .rung .lv { font-family: var(--font-data); font-size: 13px; font-weight: 600; color: var(--cyan); }
+  .rung b { font-size: 15px; }
+  .rung .pay { font-family: var(--font-data); font-size: 13px; color: var(--navy); }
+  .rung span { font-size: 13px; color: var(--ink-2); }
+  .rung.r1 { min-height: 150px; } .rung.r2 { min-height: 175px; } .rung.r3 { min-height: 200px; } .rung.r4 { min-height: 225px; }
+  .badges { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 8px; }
+  .badge { border-radius: 10px; padding: 10px 8px; text-align: center; display: grid; gap: 4px; font-size: 12px; border: 1px solid var(--line); background: var(--panel); }
+  .badge .code { font-family: var(--font-data); font-weight: 600; font-size: 15px; color: var(--navy); }
+  .badge.adv { background: var(--navy-fill); border-color: var(--navy-fill); color: var(--on-navy); }
+  .badge.adv .code { color: #6FD0F5; }
+  .lead-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; }
+  .lead-strip .box { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+
+  /* ---------- academy */
+  .committee { display: grid; gap: 8px; }
+  .seat { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .seat:last-child { border-bottom: 0; }
+  .seat .count { white-space: nowrap; font-family: var(--font-data); font-size: 20px; font-weight: 600; color: var(--navy); text-align: center; }
+  .seat b { display: block; font-size: 14px; }
+  .seat span { font-size: 13px; color: var(--ink-2); }
+  .path { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 0; }
+  .pstep { padding: 10px 8px; border-top: 4px solid var(--cyan); display: grid; gap: 2px; }
+  .pstep:nth-child(odd) { border-top-color: var(--navy); }
+  .pstep .when { font-family: var(--font-data); font-size: 12px; color: var(--ink-2); }
+  .pstep b { font-size: 14px; }
+
+  /* ---------- portfolios */
+  .ports { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .port { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+  .port .k { font-family: var(--font-data); font-size: 12px; color: var(--ink-2); }
+  .port b { font-size: 14px; }
+  .port span { font-size: 13px; color: var(--ink-2); }
+  .port.added { border-style: dashed; }
+  .rhythm { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .beat { border-left: 3px solid var(--cyan); padding: 4px 0 4px 12px; display: grid; gap: 2px; }
+  .beat b { font-size: 14px; }
+  .beat span { font-size: 13px; color: var(--ink-2); }
+
+  /* ---------- timeline */
+  .tl { min-width: 1060px; position: relative; padding-block: 8px 4px; }
+  .tl-track { position: relative; height: 4px; background: var(--line); margin: 104px 0 0; border-radius: 2px; }
+  .tl-phases { display: grid; grid-template-columns: 1fr 1fr 0.9fr 1.3fr 1.4fr 1.6fr; gap: 6px; position: absolute; left: 0; right: 0; top: 0; }
+  .ph { border-radius: 8px; padding: 10px; background: var(--tint); display: grid; gap: 2px; align-content: start; height: 92px; }
+  .ph .when { font-family: var(--font-data); font-size: 11px; color: var(--ink-2); }
+  .ph b { font-size: 13px; }
+  .ph span { font-size: 12px; color: var(--ink-2); }
+  .gates { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+  .gate { display: grid; gap: 4px; justify-items: start; }
+  .gate .dia { width: 14px; height: 14px; transform: rotate(45deg); border: 2px solid var(--navy); background: var(--panel); }
+  .gate.crit .dia { border-color: var(--crit); background: var(--crit-tint); }
+  .gate.b .dia { border-color: var(--cyan); }
+  .gate .d { font-family: var(--font-data); font-size: 12px; font-weight: 600; }
+  .gate b { font-size: 13px; }
+  .gate span { font-size: 12px; color: var(--ink-2); }
+
+  /* ---------- risks & decisions */
+  .risk { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .risk:last-child { border-bottom: 0; }
+  .risk b { font-size: 14px; }
+  .risk p { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); }
+  .decide { display: grid; gap: 10px; counter-reset: d; }
+  .dec { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start; }
+  .dec::before { counter-increment: d; content: counter(d); font-family: var(--font-data); font-weight: 600; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--navy-fill); color: var(--on-navy); }
+  .dec b { display: block; font-size: 14px; }
+  .dec span { font-size: 13px; color: var(--ink-2); }
+  footer { margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); display: grid; gap: 4px; }
+
+  a { color: var(--cyan); }
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  @media (max-width: 900px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3, .grid-2, .ladder, .rhythm { grid-template-columns: minmax(0, 1fr); }
+    .ports { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .badges { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .path { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; }
+    .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .rung.r1, .rung.r2, .rung.r3, .rung.r4 { min-height: 0; }
+  }
+  @media (max-width: 520px) {
+    .ports { grid-template-columns: minmax(0, 1fr); }
+    .crow { grid-template-columns: minmax(0, 1fr); }
+    .facts { grid-template-columns: minmax(0, 1fr); }
+    h2 { font-size: 22px; }
+  }
+  @media print {
+    .hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    section.band, .panel, .port, .rung, .risk { break-inside: avoid; }
+    .scroll { overflow: visible; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .bar .fill { transition: width 0.6s ease; }
+  }
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <div style="display:grid;gap:14px">
+      <p class="eyebrow">ER Out-of-Network Revenue Cycle · Leadership briefing · October 2026</p>
+      <h1>ER OON Operating Model 2027</h1>
+      <p class="lead">We meet the January 1 Gateway deadline without disruption, give every account one owner from coding to payment, and build a workforce that grows by skill. We start on the proven model and earn the automated one in stages.</p>
+      <span class="tag"><i aria-hidden="true"></i>Hard deadline: the IDR Gateway becomes US-only on January 1, 2027</span>
+    </div>
+    <div class="kpis" role="list">
+      <div class="kpi" role="listitem"><span class="v">10</span><span class="l">full-cycle teams replace 12 facility teams</span></div>
+      <div class="kpi" role="listitem"><span class="v">94</span><span class="l">people in Lebanon; no layoffs, no pay cuts</span></div>
+      <div class="kpi" role="listitem"><span class="v">12 → 31</span><span class="l">facilities absorbed in two years without new teams</span></div>
+      <div class="kpi" role="listitem"><span class="v">9</span><span class="l">skill badges drive levels, pay and routing</span></div>
+      <div class="kpi" role="listitem"><span class="v">$409–499K</span><span class="l">yearly saving by year two if Model B passes its gates</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="band" aria-labelledby="why">
+    <div class="head">
+      <p class="eyebrow">Why now</p>
+      <h2 id="why">Three pressures arrive together</h2>
+      <p>Each one alone would justify change. Together they make the current facility-based structure untenable.</p>
+    </div>
+    <div class="grid-3">
+      <div class="panel pressure"><span class="big">Jan 1</span><h3>The Gateway goes US-only</h3><p>Our negotiators spend 50–70% of their time in it today. From January 1, only US-based staff may use it.</p></div>
+      <div class="panel pressure"><span class="big">5×</span><h3>Workload is uneven</h3><p>Open claims per person range from 138 to 704 across facility teams. Effort, not geography, should set the load.</p></div>
+      <div class="panel pressure"><span class="big">+19</span><h3>We are growing fast</h3><p>We go from 12 to 31 facilities in two years. The model must absorb them without adding a team for each one.</p></div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="org">
+    <div class="head">
+      <p class="eyebrow">The structure</p>
+      <h2 id="org">One owner per account, ten balanced teams, a US desk for the Gateway</h2>
+      <p>Teams own payer portfolios, not facilities. Lebanon prepares every dispute and keeps every pricing decision; the US desk only enters the work into the Gateway.</p>
+    </div>
+    <div class="panel scroll" tabindex="0" aria-label="Organization chart">
+      <div class="org">
+        <div class="node top"><b>Director and Assistant Directors</b><span>Leadership board · monthly decisions on every portfolio</span></div>
+        <div class="vline"></div>
+        <div class="org-row">
+          <div class="org-col">
+            <div class="node new"><span class="pill new">New role</span><b>Senior Manager</b><span>Special projects; chairs the Training Academy; runs the board's action log</span></div>
+          </div>
+          <div class="org-col">
+            <div class="node"><b>10 full-cycle teams</b><span>Each: 1 manager, 1 team lead, 7–8 RCM specialists · 92 specialists in total</span></div>
+            <div class="teams" aria-hidden="true">
+              <div class="team"><b>T1</b>Tier 1–3</div><div class="team"><b>T2</b>Tier 1–3</div><div class="team"><b>T3</b>Tier 1–3</div><div class="team"><b>T4</b>Tier 1–3</div><div class="team"><b>T5</b>Tier 1–3</div>
+              <div class="team"><b>T6</b>Tier 1–3</div><div class="team"><b>T7</b>Tier 1–3</div><div class="team"><b>T8</b>Tier 1–3</div><div class="team"><b>T9</b>Tier 1–3</div><div class="team"><b>T10</b>Tier 1–3</div>
+            </div>
+            <div class="node"><b>Bridge shift</b><span>2 team leads, 12:00–20:00 Beirut · same-day ticket fixes for the US desk</span></div>
+          </div>
+          <div class="org-col">
+            <div class="node"><span class="pill">United States</span><b>US Gateway Desk</b><span>1 working lead, 6 associates · enters prepared disputes; no pricing decisions</span></div>
+          </div>
+          <div class="org-col">
+            <div class="node"><span class="pill">Unchanged</span><b>QA department</b><span>Checklists, audit sample, a seat on every Badge Panel</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="flow">
+    <div class="head">
+      <p class="eyebrow">How work moves</p>
+      <h2 id="flow">Lebanon prepares, the US files, results return overnight</h2>
+      <p>Only prepared files cross the boundary. No one outside the US ever sees or operates a Gateway session.</p>
+    </div>
+    <div class="panel scroll" tabindex="0" aria-label="Work flow between Lebanon and the US">
+      <div class="flow">
+        <div class="lane">
+          <h3>Lebanon <small>08:00–20:00 Beirut</small></h3>
+          <div class="step"><span class="n">1</span><div><b>Code, bill and negotiate</b><span>One specialist owns the account from coding to final payment</span></div></div>
+          <div class="step"><span class="n">2</span><div><b>Prepare the dispute</b><span>Batching, offer from the pricing guide, packet, medical-necessity report</span></div></div>
+          <div class="step"><span class="n">3</span><div><b>Bridge leads check every ticket</b><span>Released by the cutoff; fixes the same US day</span></div></div>
+          <div class="step"><span class="n">6</span><div><b>Post, reconcile and learn</b><span>Awards matched within 2 business days; outcomes feed the pricing guide</span></div></div>
+        </div>
+        <div class="bridge"><span class="arrow" aria-hidden="true">→</span><span>tickets<br>or bundles</span><span class="arrow" aria-hidden="true" style="margin-top:40px">←</span><span>results<br>as files</span></div>
+        <div class="lane">
+          <h3>United States <small>08:00–17:00 Central</small></h3>
+          <div class="step"><span class="n">4</span><div><b>US desk files in the Gateway</b><span>Own credentials and MFA; every field checked before submit</span></div></div>
+          <div class="step"><span class="n">5</span><div><b>Determinations downloaded</b><span>Saved to ClickUp for the next Beirut morning</span></div></div>
+        </div>
+      </div>
+      <p class="rule"><span class="pill good">Guardrail</span>No shared logins, screen sharing, remote control or unattended submission. Legal signs off on the onshore rule before go-live.</p>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="models">
+    <div class="head">
+      <p class="eyebrow">Two ways to run the US desk</p>
+      <h2 id="models">Model A secures January 1; Model B lowers the cost once it is proven</h2>
+      <p>Both models share the same ten teams, levels and pay bands. They differ in how Gateway filing is done. Recruiting is in-house and both run on systems we already own.</p>
+    </div>
+    <div class="grid-2">
+      <div class="panel model">
+        <div class="top"><h3>Model A · People-first</h3><span class="pill">Go-live model</span></div>
+        <div class="facts">
+          <div class="fact"><span class="v">7</span><span class="l">US desk staff</span></div>
+          <div class="fact"><span class="v">~47 min</span><span class="l">filing time per dispute</span></div>
+          <div class="fact"><span class="v">$346–421K</span><span class="l">US desk per year today</span></div>
+        </div>
+        <ul>
+          <li>Ready on January 1 with no new software <span>· ClickUp tickets and the deadline engine</span></li>
+          <li>A larger desk absorbs absences and volume spikes</li>
+          <li>Highest running cost <span>· grows to $861K–1.05M by year two</span></li>
+        </ul>
+      </div>
+      <div class="panel model b">
+        <div class="top"><h3>Model B · Automation-first</h3><span class="pill new">Earned in stages</span></div>
+        <div class="facts">
+          <div class="fact"><span class="v">3</span><span class="l">US desk staff</span></div>
+          <div class="fact"><span class="v">~10 min</span><span class="l">target filing time</span></div>
+          <div class="fact"><span class="v">$206–261K</span><span class="l">US desk and AI per year today</span></div>
+        </div>
+        <ul>
+          <li>Lebanon sends ready-to-file bundles <span>· a Submission Cockpit replaces typing</span></li>
+          <li>AI drafts packets and reports; specialists approve every one</li>
+          <li>Depends on Gateway terms and a 3-person desk <span>· one absence is a third of capacity</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="panel cost" aria-label="Annual US desk cost by model">
+      <h3>Annual US desk cost, Model A against Model B</h3>
+      <div id="cost-rows" class="cost"></div>
+      <div class="legend"><span><i style="background:var(--bar-a)"></i>Model A, midpoint</span><span><i style="background:var(--bar-b)"></i>Model B, midpoint</span><span>Whiskers show the low–high range · USD thousands · direct hire plus 25% benefits and taxes</span></div>
+    </div>
+
+    <div class="panel scroll" tabindex="0" aria-label="Side-by-side comparison">
+      <table class="cmp">
+        <thead><tr><th>Question</th><th>Model A</th><th>Model B</th><th>Edge</th></tr></thead>
+        <tbody>
+          <tr><td>Ready for January 1?</td><td>Yes</td><td>Runs on Model A's desk until Gate 2, April 30</td><td><span class="edge a">A</span></td></tr>
+          <tr><td>Outside approvals needed</td><td>Legal sign-off on the onshore rule</td><td>Also written confirmation the Gateway allows assisted filling</td><td><span class="edge a">A</span></td></tr>
+          <tr><td>Resilience to absence</td><td>1 of 7 people</td><td>1 of 3 people</td><td><span class="edge a">A</span></td></tr>
+          <tr><td>US hours covered</td><td>One US day shift</td><td>12 hours, three staggered shifts</td><td><span class="edge b">B</span></td></tr>
+          <tr><td>Lebanon hiring by year two</td><td>About 125 specialists</td><td>About 102, with AI drafting</td><td><span class="edge b">B</span></td></tr>
+          <tr><td>Cost by year two</td><td>$861K–1.05M</td><td>$452–551K</td><td><span class="edge b">B</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="careers">
+    <div class="head">
+      <p class="eyebrow">People and careers</p>
+      <h2 id="careers">One role, four levels, earned by skill</h2>
+      <p>Former titles no longer set pay or work. Nine badges certify what each specialist can do alone, control what ClickUp routes to them, and open the next level. Pay bands are USD per month.</p>
+    </div>
+    <div class="ladder">
+      <div class="rung r1"><span class="lv">L1</span><b>RCM Specialist I</b><span class="pay">$1,000–1,300</span><span>Earning the 5 core badges · Tier 3 portfolio</span></div>
+      <div class="rung r2"><span class="lv">L2</span><b>RCM Specialist II</b><span class="pay">$1,200–1,550</span><span>All 5 core badges · full-cycle account owner</span></div>
+      <div class="rung r3"><span class="lv">L3</span><b>Senior Specialist</b><span class="pay">$1,400–1,800</span><span>Core + 2 advanced; top 40% Net Recovery · Tier 1</span></div>
+      <div class="rung r4"><span class="lv">L4</span><b>Principal</b><span class="pay">$1,600–2,000</span><span>Core + 3 advanced; top 20%; teaches in the Academy</span></div>
+    </div>
+    <div class="panel" style="display:grid;gap:14px">
+      <h3>The nine badges</h3>
+      <div class="badges">
+        <div class="badge"><span class="code">C1</span>Claim follow-up</div>
+        <div class="badge"><span class="code">C2</span>Open Negotiation</div>
+        <div class="badge"><span class="code">C3</span>NNSA appeal</div>
+        <div class="badge"><span class="code">C4</span>Payment posting</div>
+        <div class="badge"><span class="code">C5</span>Medical-necessity report</div>
+        <div class="badge adv"><span class="code">A1</span>Coding (certified)</div>
+        <div class="badge adv"><span class="code">A2</span>IDR packet and offer</div>
+        <div class="badge adv"><span class="code">A3</span>MVA negotiation</div>
+        <div class="badge adv"><span class="code">A4</span>Payer strategy</div>
+      </div>
+      <div class="lead-strip"><span class="muted">Leadership ladder:</span><span class="box">L3 + coaching assessment → <b>Team Lead</b> $1,400–2,000</span><span class="box">12 months as TL, or L4 + training → <b>Manager</b> $2,000–3,000</span><span class="muted">About 14 team lead and 7 manager seats open as we grow.</span></div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="academy">
+    <div class="head">
+      <p class="eyebrow">Training Academy</p>
+      <h2 id="academy">A new hire becomes a full account owner in six months</h2>
+      <p>Training happens on live work: about 20% classroom, 80% supervised production checked by a badge-holder. A committee awards badges and recommends promotions; no one decides alone on their own team.</p>
+    </div>
+    <div class="grid-2">
+      <div class="panel committee">
+        <h3>The Academy Committee</h3>
+        <div class="seat"><span class="count">1</span><div><b>Chair and owner</b><span>A manager, preferably the Senior Manager</span></div></div>
+        <div class="seat"><span class="count">2–3</span><div><b>Managers</b><span>From different teams; 12-month staggered terms</span></div></div>
+        <div class="seat"><span class="count">2+2</span><div><b>L4 Principals and L3 Seniors</b><span>Lead trainers and assessors</span></div></div>
+        <div class="seat"><span class="count">2</span><div><b>Team leads, rotating</b><span>New pair each quarter; 8 serve every year</span></div></div>
+        <div class="seat"><span class="count">1</span><div><b>QA reviewer</b><span>Scores quality; sits on every Badge Panel</span></div></div>
+      </div>
+      <div class="panel" style="display:grid;gap:14px;align-content:start">
+        <h3>From day one to L2</h3>
+        <div class="path">
+          <div class="pstep"><span class="when">Weeks 1–2</span><b>Onboarding</b><span class="muted" style="font-size:12px">HIPAA, systems, NSA</span></div>
+          <div class="pstep"><span class="when">Months 1–2</span><b>C1 + C4</b><span class="muted" style="font-size:12px">Follow-up, posting</span></div>
+          <div class="pstep"><span class="when">Month 3</span><b>C5</b><span class="muted" style="font-size:12px">Medical necessity</span></div>
+          <div class="pstep"><span class="when">Months 4–5</span><b>C2</b><span class="muted" style="font-size:12px">Open Negotiation</span></div>
+          <div class="pstep"><span class="when">Month 6</span><b>C3</b><span class="muted" style="font-size:12px">NNSA appeal</span></div>
+          <div class="pstep"><span class="when">Next quarter</span><b>L2</b><span class="muted" style="font-size:12px">Account owner</span></div>
+        </div>
+        <div class="facts">
+          <div class="fact"><span class="v">100%</span><span class="l">core badges held by June 30, 2027</span></div>
+          <div class="fact"><span class="v">2+</span><span class="l">holders of every badge in every team</span></div>
+          <div class="fact"><span class="v">≤10 days</span><span class="l">from assessment request to result</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="ports">
+    <div class="head">
+      <p class="eyebrow">Leadership portfolios</p>
+      <h2 id="ports">Every manager owns one area the model depends on</h2>
+      <p>Eleven portfolios, one per manager and the Senior Manager. Owners are assigned by the leadership board. Dashed tiles are additions the model needs to succeed.</p>
+    </div>
+    <div class="ports">
+      <div class="port"><span class="k">Training Academy</span><b>Onboard, train, award, promote</b><span>Core badges for all by June 30, 2027</span></div>
+      <div class="port"><span class="k">Payments and Reconciliation</span><b>Every dollar posted and reconciled</b><span>IDR awards matched in 2 business days</span></div>
+      <div class="port"><span class="k">Onshore–Offshore Liaison</span><b>One channel: Lebanon, US desk, accounting</b><span>98% same-day completion</span></div>
+      <div class="port"><span class="k">External Relations</span><b>IDR entities and payers</b><span>80% of escalations resolved in 30 days</span></div>
+      <div class="port"><span class="k">Automation, ClickUp, AI and Data</span><b>Tools and one source of numbers</b><span>Dashboards ready by the 3rd business day</span></div>
+      <div class="port"><span class="k">Coding Quality</span><b>Guidelines and E/M level ratios</b><span>95% coding audit accuracy</span></div>
+      <div class="port"><span class="k">Denials and NNSA Strategy</span><b>Patterns, appeals, letter library</b><span>Denial rate down every quarter</span></div>
+      <div class="port"><span class="k">IDR Performance</span><b>Results by location, payer, entity</b><span>Win rate and recovery after fees</span></div>
+      <div class="port added"><span class="k">Compliance and Deadlines</span><b>Deadlines, HIPAA, Gateway access</b><span>Zero missed regulatory deadlines</span></div>
+      <div class="port added"><span class="k">Pricing Guide</span><b>Offers, settlements, decision rights</b><span>100% inside the guide or approved</span></div>
+      <div class="port added"><span class="k">Capacity and Growth</span><b>Workload balance, 19 new facilities</b><span>Teams within 90–110% of target</span></div>
+      <div class="port" style="background:var(--tint)"><span class="k">How they report</span><b>Findings and recommendations, every month</b><span>One template, one set of numbers</span></div>
+    </div>
+    <div class="rhythm">
+      <div class="beat"><b>Monthly report</b><span>To the director and assistant directors by the 5th business day</span></div>
+      <div class="beat"><b>Monthly leadership board</b><span>Each owner presents findings; the board decides</span></div>
+      <div class="beat"><b>Quarterly deep-dive</b><span>Every portfolio reviewed in depth once a quarter</span></div>
+      <div class="beat"><b>Yearly review</b><span>Targets reset; owners confirmed or rotated</span></div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="road">
+    <div class="head">
+      <p class="eyebrow">Roadmap</p>
+      <h2 id="road">The Gateway first, the structure second, automation when it is proven</h2>
+      <p>The cutover happens on December 19, two weeks before the deadline. Team structure changes only after the Gateway is stable, so any problem has one cause.</p>
+    </div>
+    <div class="panel scroll" tabindex="0" aria-label="Implementation timeline">
+      <div class="tl">
+        <div class="tl-phases">
+          <div class="ph"><span class="when">Oct 2026</span><b>Prepare</b><span>Legal sign-off; hire the US desk; Academy set up</span></div>
+          <div class="ph"><span class="when">Nov 2026</span><b>Build and train</b><span>Ticket workflow and deadline engine live by Nov 21</span></div>
+          <div class="ph"><span class="when">Dec 2026</span><b>Parallel run</b><span>25%, 50%, then all Gateway work</span></div>
+          <div class="ph"><span class="when">Jan–Feb 2027</span><b>Launch 10 teams</b><span>Fast-track badges; provisional levels; Cockpit pilot</span></div>
+          <div class="ph"><span class="when">Mar–Jun 2027</span><b>Cross-train</b><span>Everyone earns the 5 core badges; Model B steps down</span></div>
+          <div class="ph"><span class="when">Jul 2027–2028</span><b>Full cycle and growth</b><span>Advanced badges; 19 facilities join existing teams</span></div>
+        </div>
+        <div class="tl-track"></div>
+        <div class="gates">
+          <div class="gate b"><span class="dia"></span><span class="d">Nov 30</span><b>Gate 0</b><span>Legal and Gateway terms say yes to Model B</span></div>
+          <div class="gate"><span class="dia"></span><span class="d">Dec 19</span><b>Full cutover</b><span>Same-day completion; 98% first-pass tickets</span></div>
+          <div class="gate crit"><span class="dia"></span><span class="d">Jan 1, 2027</span><b>Gateway US-only</b><span>Hard regulatory deadline</span></div>
+          <div class="gate b"><span class="dia"></span><span class="d">Mar 15</span><b>Gate 1</b><span>≤12 min per dispute; errors under 0.5%</span></div>
+          <div class="gate b"><span class="dia"></span><span class="d">Apr 30</span><b>Gate 2</b><span>4 weeks on a 3-person desk, backlog under a day</span></div>
+          <div class="gate"><span class="dia"></span><span class="d">Jun 30</span><b>Levels confirmed</b><span>Core badges earned; provisional levels final</span></div>
+          <div class="gate"><span class="dia"></span><span class="d">Jan 2028</span><b>Retention paid out</b><span>Critical staff retained through the change</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="font-size:13px">Blue gates belong to Model B. If any Model B gate fails, we stay on Model A at no extra cost.</p>
+  </section>
+
+  <section class="band" aria-labelledby="risk">
+    <div class="grid-2">
+      <div class="panel">
+        <p class="eyebrow">Risks we are managing</p>
+        <h2 id="risk" style="font-size:22px;margin-bottom:6px">Every major risk has an owner and a fallback</h2>
+        <div class="risk"><b>We misread the Gateway's onshore rule</b><span class="pill crit">High impact</span><p>Legal sign-off before the build; offshore access stays as a fallback until December 19.</p></div>
+        <div class="risk"><b>The US desk falls behind as volume grows</b><span class="pill warn">Medium</span><p>A backlog trigger adds staff within 2 weeks; bridge leads report it daily.</p></div>
+        <div class="risk"><b>People read new levels as a demotion</b><span class="pill warn">Medium</span><p>Provisional levels, protected pay, published criteria and one appeal each.</p></div>
+        <div class="risk"><b>We lose IDR experts during the change</b><span class="pill crit">High impact</span><p>Retention bonus through January 2028 and an L4 path that does not require managing.</p></div>
+        <div class="risk"><b>Model B's small desk or tools fail</b><span class="pill warn">Model B</span><p>Kill switches return us to Model A staffing; manual entry always stays available.</p></div>
+      </div>
+      <div class="panel" style="display:grid;gap:14px;align-content:start">
+        <p class="eyebrow">Decisions requested today</p>
+        <h2 style="font-size:22px">Six approvals to start in October</h2>
+        <div class="decide">
+          <div class="dec"><div><b>Approve the US Gateway Desk</b><span>1 working lead and 6 associates, hired in-house from October</span></div></div>
+          <div class="dec"><div><b>Approve the 10 full-cycle teams</b><span>Launch in January–February 2027, after the Gateway cutover</span></div></div>
+          <div class="dec"><div><b>Approve the role, badges and pay bands</b><span>Including the bridge shift incentive, up to $6,000 a year</span></div></div>
+          <div class="dec"><div><b>Create the Senior Manager role and the portfolios</b><span>Senior Manager in place before the Academy set-up</span></div></div>
+          <div class="dec"><div><b>Approve Model B's Gate 0 review and Cockpit pilot</b><span>Step down to 3 US staff only after Gates 1 and 2 pass</span></div></div>
+          <div class="dec"><div><b>Confirm the no-layoff commitment</b><span>No one's pay goes down; levels provisional until June 30, 2027</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Sources: ER OON Operating Model 2027 executive summary; Model A vs Model B comparison; RCM Specialist Badge Competency Matrix; Training Academy curriculum; Manager portfolios appendix.</span>
+    <span>US cost figures are approximate Texas market rates for direct hires, not quotes. Recruiting is in-house and infrastructure is already in place, so neither is included.</span>
+  </footer>
+</main>
+
+<script>
+  (function () {
+    var rows = [
+      { label: 'Today', a: [346, 421], b: [206, 261], save: '$140–160K' },
+      { label: 'Year 1', a: [580, 707], b: [331, 408], save: '$249–299K' },
+      { label: 'Year 2', a: [861, 1050], b: [452, 551], save: '$409–499K' }
+    ];
+    var max = 1250;
+    var pct = function (v) { return (v / max * 100).toFixed(2) + '%'; };
+    var box = document.getElementById('cost-rows');
+    rows.forEach(function (r) {
+      var midA = (r.a[0] + r.a[1]) / 2, midB = (r.b[0] + r.b[1]) / 2;
+      var bar = function (cls, mid, rng, name) {
+        return '<div class="bar"><span class="fill ' + cls + '" style="width:' + pct(mid) + '"></span>' +
+          '<span class="rng" style="left:' + pct(rng[0]) + ';width:' + pct(rng[1] - rng[0]) + '"></span>' +
+          '<span class="txt" style="left:calc(' + pct(rng[1]) + ' + 10px)">' + name + ' $' + rng[0] + '–' + rng[1] + 'K</span></div>';
+      };
+      var el = document.createElement('div');
+      el.className = 'crow';
+      el.innerHTML = '<span class="lbl">' + r.label + '</span><div class="bars">' + bar('a', midA, r.a, 'A') + bar('b', midB, r.b, 'B') +
+        '</div><div class="save"><b>' + r.save + '</b><span>saved a year with B</span></div>';
+      box.appendChild(el);
+    });
+  })();
+</script>
