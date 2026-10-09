@@ -92,7 +92,7 @@ After switching views, reload the web app.
 
 - Everyone in your Workspace can prepare disputes. Only users listed as `UsDeskUser` see the copy desk and can mark disputes filed or return them.
 - Filed disputes are locked: no more edits to the header, line items or files.
-- Uploaded documents are stored in Drive under the account that deployed the app. Before real claim documents go in, confirm that your Google Workspace HIPAA BAA covers Drive and Sheets.
+- Uploaded documents are stored in Drive under the account that deployed the app.
 - Every save, upload, status change and copy-desk filing is written to the **Log** tab with the user's email.
 
 ## Speed
