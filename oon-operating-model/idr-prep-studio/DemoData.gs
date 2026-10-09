@@ -55,10 +55,12 @@ function seedDemoData() {
   if (!ss_().getSheetByName(TABS.disputes)) setup();
   clearDemoData();
 
-  const disputesSh = tab_(TABS.disputes);
-  const linesSh = tab_(TABS.lines);
-  const dHeader = disputesSh.getRange(1, 1, 1, disputesSh.getLastColumn()).getValues()[0];
-  const lHeader = linesSh.getRange(1, 1, 1, linesSh.getLastColumn()).getValues()[0];
+  // Rows are collected here and written once per tab at the end.
+  const disputeRecs = [];
+  const lineRecs = [];
+  const fileRecs = [];
+  const logRecs = [];
+  const needPdf = [];
   const planTypes = options_().HealthPlanType || ['Fully insured group health plan'];
   const me = currentUser_();
   const today = new Date();
@@ -103,11 +105,10 @@ function seedDemoData() {
 
     // ---- documents and line items
     if (spec.stage !== 'draft-q1') {
-      addDemoFile_(folder, id, 'on_evidence', '', 'Notice of Open Negotiation - ' + id + '.pdf',
+      addDemoFile_(fileRecs, folder, id, 'on_evidence', '', 'Notice of Open Negotiation - ' + id + '.pdf',
         'Notice of Open Negotiation', ['Sent to: ' + plan.name, 'Open negotiation start date: ' + onStart]);
     }
 
-    const lineRows = [];
     let eob = null;
     for (let n = 1; n <= spec.lines; n++) {
       const c = DEMO_CODES[(i + n) % DEMO_CODES.length];
@@ -127,20 +128,20 @@ function seedDemoData() {
         pos_code: '23',
         location: 'TX'
       };
-      lineRows.push(lHeader.map(function (h) { return line[h] !== undefined ? String(line[h]) : ''; }));
+      lineRecs.push(line);
       // One synthetic EOB per dispute, attached to every line, keeps seeding fast.
       if (!eob) {
         eob = createDemoPdf_(folder, 'EOB and remittance - ' + id + '.pdf', 'Explanation of Benefits / Remittance Advice',
           ['Payer: ' + plan.name, 'Claims in this file: ' + spec.lines]);
       }
-      tab_(TABS.files).appendRow([id, 'qpa', n, eob.getName(), eob.getUrl(), eob.getId(), preparer, stamp_(created)]);
+      fileRecs.push({ DisputeID: id, Category: 'qpa', LineNo: n, Name: eob.getName(), Url: eob.getUrl(), FileId: eob.getId(),
+        UploadedBy: preparer, UploadedAt: stamp_(created) });
     }
-    if (lineRows.length) linesSh.getRange(linesSh.getLastRow() + 1, 1, lineRows.length, lHeader.length).setValues(lineRows);
 
     // ---- stage-specific status
     if (spec.stage === 'returned' || spec.stage === 'ready' || spec.stage === 'filed') {
       if (spec.lines >= 5) {
-        addDemoFile_(folder, id, 'additional', '', 'Payer correspondence - ' + id + '.pdf', 'Additional supporting documentation',
+        addDemoFile_(fileRecs, folder, id, 'additional', '', 'Payer correspondence - ' + id + '.pdf', 'Additional supporting documentation',
           ['Correspondence with ' + plan.name + ' during open negotiation.']);
       }
     }
@@ -160,15 +161,18 @@ function seedDemoData() {
       v.PortalDisputeNumber = 'DISP-DEMO-' + (480000 + i * 17);
     }
 
-    disputesSh.appendRow(dHeader.map(function (h) { return v[h] !== undefined ? String(v[h]) : ''; }));
-
-    // The confirmation PDF is built from the saved rows, exactly as the app does it.
-    if (spec.stage === 'ready' || spec.stage === 'filed' || spec.stage === 'returned') {
-      const pdfUrl = buildConfirmationPdf_(id);
-      setCells_(disputesSh, findRow_(disputesSh, 'DisputeID', id), { ConfirmationPdfUrl: pdfUrl });
-    }
-    log_(id, 'demo-seed', spec.stage + ', ' + spec.lines + ' line(s)');
+    disputeRecs.push(v);
+    if (spec.stage === 'ready' || spec.stage === 'filed' || spec.stage === 'returned') needPdf.push(id);
+    logRecs.push({ Timestamp: nowStr_(), User: me, DisputeID: id, Event: 'demo-seed', Details: spec.stage + ', ' + spec.lines + ' line(s)' });
   });
+
+  appendRecords_(TABS.disputes, disputeRecs);
+  appendRecords_(TABS.lines, lineRecs);
+  appendRecords_(TABS.files, fileRecs);
+  appendRecords_(TABS.log, logRecs);
+
+  // The confirmation PDF is built from the saved rows, exactly as the app does it.
+  needPdf.forEach(function (id) { setCells_(id, { ConfirmationPdfUrl: buildConfirmationPdf_(id) }); });
 
   Logger.log('Demo data ready: ' + DEMO_PLAN.length + ' disputes (' + DEMO_PREFIX + '001 to ' + DEMO_PREFIX + pad3_(DEMO_PLAN.length) + ').');
   Logger.log('You are ' + (isUsDesk_(me) ? 'on the US desk view.' : 'on the Lebanon view.') + ' Run demoUseUsView() or demoUseLebanonView() to switch.');
@@ -178,47 +182,42 @@ function seedDemoData() {
 function demoUseUsView() {
   const me = currentUser_();
   if (isUsDesk_(me)) { Logger.log(me + ' is already on the US desk view. Reload the web app.'); return; }
-  tab_(TABS.options).appendRow(['UsDeskUser', me, 'Added by demoUseUsView()']);
+  appendRecords_(TABS.options, [{ List: 'UsDeskUser', Value: me, Note: 'Added by demoUseUsView()' }]);
+  clearOptionsCache_();
   Logger.log(me + ' now sees the US desk view. Reload the web app.');
 }
 
 /** Takes your account off the US desk: you see the Lebanon entry screens. */
 function demoUseLebanonView() {
   const me = String(currentUser_()).toLowerCase();
-  const sh = tab_(TABS.options);
-  const data = sh.getDataRange().getValues();
-  let removed = 0;
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === 'UsDeskUser' && String(data[i][1]).toLowerCase() === me) { sh.deleteRow(i + 1); removed++; }
-  }
+  const removed = deleteWhere_(TABS.options, function (r) { return r.List === 'UsDeskUser' && String(r.Value).toLowerCase() === me; });
+  clearOptionsCache_();
   Logger.log(removed ? me + ' now sees the Lebanon view. Reload the web app.' : me + ' was already on the Lebanon view.');
 }
 
 /** Removes every demo dispute: its rows in all tabs and its Drive folder. Real disputes are untouched. */
 function clearDemoData() {
   [TABS.disputes, TABS.lines, TABS.files, TABS.log].forEach(function (name) {
-    const sh = ss_().getSheetByName(name);
-    if (!sh || sh.getLastRow() < 2) return;
-    const data = sh.getDataRange().getValues();
-    const col = name === TABS.log ? 2 : 0;
-    for (let i = data.length - 1; i >= 1; i--) {
-      if (String(data[i][col]).indexOf(DEMO_PREFIX) === 0) sh.deleteRow(i + 1);
-    }
+    if (!ss_().getSheetByName(name)) return;
+    deleteWhere_(name, function (r) { return String(r.DisputeID).indexOf(DEMO_PREFIX) === 0; });
   });
   const root = rootFolder_();
   const it = root.getFolders();
+  const cached = [];
   while (it.hasNext()) {
     const f = it.next();
-    if (f.getName().indexOf(DEMO_PREFIX) === 0) f.setTrashed(true);
+    if (f.getName().indexOf(DEMO_PREFIX) === 0) { f.setTrashed(true); cached.push('folder:' + f.getName()); }
   }
+  if (cached.length) CacheService.getScriptCache().removeAll(cached);
   Logger.log('Demo data removed.');
 }
 
 // ------------------------------------------------------------------ helpers
 
-function addDemoFile_(folder, id, category, lineNo, name, title, lines) {
+function addDemoFile_(fileRecs, folder, id, category, lineNo, name, title, lines) {
   const file = createDemoPdf_(folder, name, title, lines);
-  tab_(TABS.files).appendRow([id, category, lineNo, name, file.getUrl(), file.getId(), 'demo', nowStr_()]);
+  fileRecs.push({ DisputeID: id, Category: category, LineNo: lineNo, Name: name, Url: file.getUrl(), FileId: file.getId(),
+    UploadedBy: 'demo', UploadedAt: nowStr_() });
   return file;
 }
 

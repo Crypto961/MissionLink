@@ -154,6 +154,10 @@
     .finish input[type=text], .finish textarea { width: 100%; padding: 9px 10px; border: 1px solid #C5D0DA; border-radius: 8px; font: inherit; margin: 6px 0 10px; }
     .toast { position: fixed; right: 20px; bottom: 20px; background: var(--primary-navy); color: var(--white); padding: 12px 16px; border-radius: 10px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 50; max-width: 420px; }
     .toast.error { background: var(--functional-red); }
+    #busybar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60; overflow: hidden; opacity: 0; transition: opacity .2s; pointer-events: none; }
+    #busybar.on { opacity: 1; }
+    #busybar::before { content: ''; position: absolute; top: 0; bottom: 0; width: 35%; background: var(--primary-cyan); animation: busy-slide 1s ease-in-out infinite; }
+    @keyframes busy-slide { from { left: -35%; } to { left: 100%; } }
 
     @media (max-width: 760px) {
       .f.half, .f.third, .f.quarter { grid-column: span 12; }
@@ -182,11 +186,13 @@
 
   <main id="app"></main>
   <div id="toast" class="toast hidden" role="status"></div>
+  <div id="busybar" aria-hidden="true"></div>
 
   <script>
   (function () {
     // ---------------------------------------------------------------- state and server calls
-    var S = { boot: null, view: 'list', filter: 'Draft', id: null, d: {}, lines: [], files: [], page: 0, line: null, copied: {}, deskLine: 0 };
+    var BOOT = <?!= BOOT_JSON ?>;
+    var S = { lists: {}, boot: null, view: 'list', filter: 'Draft', id: null, d: {}, lines: [], files: [], page: 0, line: null, copied: {}, deskLine: 0 };
     var app = document.getElementById('app');
     var loader = document.getElementById('loader-wrapper');
     var PAGES = ['q1', 'q2', 'parties', 'lines', 'final'];
@@ -213,6 +219,7 @@
     }
 
     function busy(on) {
+      document.getElementById('busybar').className = on ? 'on' : '';
       app.querySelectorAll('button').forEach(function (b) { b.disabled = on; });
     }
 
@@ -379,17 +386,22 @@
       });
     }
 
+    // Files go up in parallel; each reply carries the dispute's file list, merged here.
     function uploadAll(files, category, lineNo) {
-      var chain = Promise.resolve();
-      Array.prototype.forEach.call(files, function (file) {
-        chain = chain.then(function () {
-          if (file.size > 45 * 1024 * 1024) throw new Error(file.name + ' is over 45 MB.');
-          return readAsBase64(file).then(function (b64) {
-            return call('uploadFile', S.id, category, lineNo || '', file.name, file.type, b64);
-          });
+      var big = files.filter(function (f) { return f.size > 45 * 1024 * 1024; })[0];
+      if (big) return Promise.reject(new Error(big.name + ' is over 45 MB.'));
+      return Promise.all(files.map(function (file) {
+        return readAsBase64(file).then(function (b64) {
+          return call('uploadFile', S.id, category, lineNo || '', file.name, file.type, b64);
+        });
+      })).then(function (replies) {
+        var seen = {};
+        S.files = S.files.concat.apply(S.files, replies.map(function (r) { return r.files; })).filter(function (f) {
+          if (seen[f.FileId]) return false;
+          seen[f.FileId] = true;
+          return true;
         });
       });
-      return chain.then(refresh);
     }
 
     // After an upload or removal only the file lists change, so anything typed but not yet saved stays put.
@@ -405,8 +417,8 @@
         b.addEventListener('click', function (e) {
           e.preventDefault();
           busy(true);
-          call('removeFile', S.id, b.getAttribute('data-remove-file')).then(refresh)
-            .then(function () { busy(false); updateFileLists(container, lineNo); }).catch(fail);
+          call('removeFile', S.id, b.getAttribute('data-remove-file'))
+            .then(function (files) { S.files = files; busy(false); updateFileLists(container, lineNo); }).catch(fail);
         });
       });
     }
@@ -430,11 +442,15 @@
 
     // ---------------------------------------------------------------- data loading
 
+    // Every server action that changes a dispute replies with the updated dispute, so no second call is needed.
+    function apply(bundle) {
+      S.d = bundle.dispute; S.lines = bundle.lines; S.files = bundle.files;
+      S.lists = {}; // list counts and dates changed
+    }
+
     function refresh() {
       if (!S.id) return Promise.resolve();
-      return call('getDispute', S.id).then(function (r) {
-        S.d = r.dispute; S.lines = r.lines; S.files = r.files;
-      });
+      return call('getDispute', S.id).then(apply);
     }
 
     function open(id, view) {
@@ -470,19 +486,29 @@
       app.querySelectorAll('[data-f]').forEach(function (b) {
         b.addEventListener('click', function () { S.filter = b.getAttribute('data-f'); renderList(); });
       });
-      call('listDisputes', S.filter).then(function (rows) {
-        var box = app.querySelector('#rows');
-        if (!rows.length) { box.innerHTML = '<p class="muted">Nothing here.</p>'; return; }
-        box.innerHTML = '<table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Line items</th><th>Team / owner</th><th>Last update</th></tr>' +
-          rows.map(function (r) {
-            return '<tr class="click" data-id="' + esc(r.id) + '"><td><b>' + esc(r.id) + '</b></td><td>' + badge(r.status) +
-              (r.returnReason ? '<div class="muted" style="margin-top:4px">' + esc(r.returnReason) + '</div>' : '') + '</td><td>' + esc(r.plan) +
-              '</td><td>' + esc(r.lines) + '</td><td>' + esc([r.team, r.owner].filter(String).join(' / ')) + '</td><td>' + esc(r.updatedAt) + '<div class="muted">' + esc(r.updatedBy) + '</div></td></tr>';
-          }).join('') + '</table>';
-        box.querySelectorAll('tr[data-id]').forEach(function (tr) {
-          tr.addEventListener('click', function () { open(tr.getAttribute('data-id')); });
-        });
+      // A list seen before shows at once; it is then refreshed in the background unless it is only seconds old.
+      var filter = S.filter, cached = S.lists[filter];
+      if (cached) showRows(cached.rows);
+      if (cached && Date.now() - cached.at < 5000) return;
+      call('listDisputes', filter).then(function (rows) {
+        S.lists[filter] = { rows: rows, at: Date.now() };
+        if (S.view === 'list' && S.filter === filter) showRows(rows);
       }).catch(fail);
+    }
+
+    function showRows(rows) {
+      var box = app.querySelector('#rows');
+      if (!box) return;
+      if (!rows.length) { box.innerHTML = '<p class="muted">Nothing here.</p>'; return; }
+      box.innerHTML = '<table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Line items</th><th>Team / owner</th><th>Last update</th></tr>' +
+        rows.map(function (r) {
+          return '<tr class="click" data-id="' + esc(r.id) + '"><td><b>' + esc(r.id) + '</b></td><td>' + badge(r.status) +
+            (r.returnReason ? '<div class="muted" style="margin-top:4px">' + esc(r.returnReason) + '</div>' : '') + '</td><td>' + esc(r.plan) +
+            '</td><td>' + esc(r.lines) + '</td><td>' + esc([r.team, r.owner].filter(String).join(' / ')) + '</td><td>' + esc(r.updatedAt) + '<div class="muted">' + esc(r.updatedBy) + '</div></td></tr>';
+        }).join('') + '</table>';
+      box.querySelectorAll('tr[data-id]').forEach(function (tr) {
+        tr.addEventListener('click', function () { open(tr.getAttribute('data-id')); });
+      });
     }
 
     // ---------------------------------------------------------------- editor (offshore entry)
@@ -550,10 +576,11 @@
         if (bad) { toast('Fix the highlighted fields to continue.', true); return; }
         if (missingFile) { toast('Upload the required document before continuing.', true); return; }
         busy(true);
-        call('saveDispute', { id: S.id, values: values, page: page.id }).then(function (id) {
-          S.id = id;
-          return refresh();
-        }).then(function () { busy(false); S.page++; render(); }).catch(fail);
+        call('saveDispute', { id: S.id, values: values, page: page.id }).then(function (r) {
+          S.id = r.id;
+          apply(r.bundle);
+          busy(false); S.page++; render();
+        }).catch(fail);
       });
     }
 
@@ -610,7 +637,7 @@
       if (app.querySelector('#del')) app.querySelector('#del').addEventListener('click', function () {
         if (!confirm('Delete line ' + lineNo + '?')) return;
         busy(true);
-        call('deleteLine', S.id, lineNo).then(refresh).then(function () { busy(false); S.line = null; render(); }).catch(fail);
+        call('deleteLine', S.id, lineNo).then(function (b) { apply(b); busy(false); S.line = null; render(); }).catch(fail);
       });
       if (app.querySelector('#save')) {
         app.querySelector('#save').addEventListener('click', function () {
@@ -632,9 +659,11 @@
         return Promise.resolve(null);
       }
       busy(true);
-      return call('saveLine', S.id, S.line.LineNo || null, values).then(function (n) {
-        S.line = Object.assign({}, rec, { LineNo: n });
-        return refresh().then(function () { busy(false); return n; });
+      return call('saveLine', S.id, S.line.LineNo || null, values).then(function (r) {
+        S.line = Object.assign({}, rec, { LineNo: r.lineNo });
+        apply(r.bundle);
+        busy(false);
+        return r.lineNo;
       }).catch(function (e) { fail(e); throw e; });
     }
 
@@ -680,11 +709,10 @@
             box.scrollIntoView({ behavior: 'smooth' });
             return;
           }
-          return refresh().then(function () {
-            render();
-            app.querySelector('#result').innerHTML = '<div class="okbox"><b>Saved and sent to the US desk.</b> The confirmation PDF of this page is in the dispute folder: ' +
+          apply(r.bundle);
+          render();
+          app.querySelector('#result').innerHTML = '<div class="okbox"><b>Saved and sent to the US desk.</b> The confirmation PDF of this page is in the dispute folder: ' +
               '<a target="_blank" rel="noopener" href="' + esc(r.pdfUrl) + '">open the PDF</a>.</div>';
-          });
         }).catch(fail);
       });
     }
@@ -832,13 +860,13 @@
           busy(true);
           (f ? readAsBase64(f).then(function (b) { return { name: f.name, mimeType: f.type, data: b }; }) : Promise.resolve(null))
             .then(function (pdf) { return call('markFiled', S.id, no, pdf); })
-            .then(refresh).then(function () { busy(false); toast('Marked as filed'); renderDesk(); }).catch(fail);
+            .then(function (b) { apply(b); busy(false); toast('Marked as filed'); renderDesk(); }).catch(fail);
         });
         app.querySelector('#return').addEventListener('click', function () {
           var reason = app.querySelector('#reason').value.trim();
           if (!reason) { toast('Say what needs fixing.', true); return; }
           busy(true);
-          call('returnDispute', S.id, reason).then(function () { busy(false); toast('Returned to Lebanon'); S.view = 'list'; S.filter = 'Ready for US desk'; render(); }).catch(fail);
+          call('returnDispute', S.id, reason).then(function () { S.lists = {}; busy(false); toast('Returned to Lebanon'); S.view = 'list'; S.filter = 'Ready for US desk'; render(); }).catch(fail);
         });
       }
     }
@@ -859,10 +887,12 @@
       loader.firstChild.textContent = 'Something went wrong loading this page: ' + message;
     }
 
-    call('getBootstrap').then(function (boot) {
+    // The first screen's data is built into the page; the server call is only a fallback.
+    (BOOT && !BOOT.error ? Promise.resolve(BOOT) : call('getBootstrap', true)).then(function (boot) {
       S.boot = boot;
       document.getElementById('who').innerHTML = esc(boot.user) + (boot.isUsDesk ? '<span class="desk-pill">US desk</span>' : '');
       if (boot.isUsDesk) S.filter = 'Ready for US desk';
+      if (boot.list && boot.listFilter === S.filter) S.lists[S.filter] = { rows: boot.list, at: Date.now() };
       render();
       setTimeout(function () { loader.classList.add('loaded'); }, 300);
     }).catch(function (e) { showError(e.message || String(e)); });

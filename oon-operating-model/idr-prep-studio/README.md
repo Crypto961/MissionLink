@@ -35,20 +35,25 @@ Nothing in this app connects to, or sends anything to, the CMS portal.
 2. In the Sheet, open **Extensions → Apps Script**.
 3. Replace the default `Code.gs` with this `Code.gs`.
 4. Add two HTML files with **+ → HTML**, named exactly **Index** and **Pdf**, and paste in `Index.html` and `Pdf.html`.
-5. Select **setup** in the function menu and click **Run**. Approve the permissions prompt. This creates:
+5. In the editor's left bar, click **Services +**, choose **Google Sheets API** and click **Add**. Keep the identifier `Sheets`. This makes the app much faster. Without it, the app still works but is slower.
+6. Select **setup** in the function menu and click **Run**. Approve the permissions prompt. This creates:
    - The tabs **Disputes**, **LineItems**, **Files**, **Options** and **Log**.
    - A Drive folder named **IDR Prep Studio - Disputes**.
    - You as the first US desk user.
-6. In the **Options** tab:
+7. In the **Options** tab:
    - Add one row per US desk user, with `UsDeskUser` in List and their email in Value.
    - Replace the **HealthPlanType** rows with the exact wording of the portal's Health Plan Type list. The portal loads that list on demand, so it wasn't in the saved pages.
    - The **State** list is already filled in.
-7. **Deploy → New deployment → Web app**:
+8. **Deploy → New deployment → Web app**:
    - **Execute as:** Me
    - **Who has access:** Anyone within your organization
-8. Share the web app URL with the team. Everyone signs in with their Google Workspace account.
+9. Share the web app URL with the team. Everyone signs in with their Google Workspace account.
 
-When you change the code later, use **Deploy → Manage deployments → Edit → New version** so the same URL picks up the change.
+When you change the code later:
+1. Run **setup** again. It is safe to re-run, and it keeps every tab as plain text so typed dates and amounts stay exactly as entered. Any cells Sheets had already turned into dates or numbers are written back as text.
+2. Use **Deploy → Manage deployments → Edit → New version** so the same URL picks up the change.
+
+The Drive API advanced service is not needed. It does no harm if you have already added it.
 
 ## Demo data
 
@@ -89,6 +94,15 @@ After switching views, reload the web app.
 - Filed disputes are locked: no more edits to the header, line items or files.
 - Uploaded documents are stored in Drive under the account that deployed the app. Before real claim documents go in, confirm that your Google Workspace HIPAA BAA covers Drive and Sheets.
 - Every save, upload, status change and copy-desk filing is written to the **Log** tab with the user's email.
+
+## Speed
+
+- **Opening the app:** the first screen's data is built into the page, so the list shows without a second server call.
+- **Saving:** a page save takes about 5 Sheet calls, down from about 75. Each row is written in one call, and one request reads all the tabs a screen needs.
+- **Fewer round trips:** every save, upload and status change sends back the updated dispute, so the screen updates without a second request.
+- **Uploads:** several files picked at once upload in parallel.
+- **Lists:** a list you have already opened shows immediately and then refreshes in the background.
+- **Options cache:** the Options lists, including US desk users, are cached for 10 minutes. Editing the Options tab clears the cache right away. If a change doesn't show, reload the web app.
 
 ## Limits worth knowing
 
