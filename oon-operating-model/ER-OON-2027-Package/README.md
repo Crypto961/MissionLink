@@ -8,8 +8,8 @@ Models A and B are included for comparison.
 
 | File | Description |
 | --- | --- |
-| `01-Presentation/ER-OON-Operating-Model-2027-Deck.pdf` | Board deck, PDF. |
-| `01-Presentation/ER-OON-Operating-Model-2027-Deck.pptx` | Board deck, editable PowerPoint. |
+| `01-Presentation/ER-OON-Operating-Model-2027-Deck.pdf` | Board deck, PDF (24 slides). |
+| `01-Presentation/ER-OON-Operating-Model-2027-Deck.pptx` | Board deck, editable PowerPoint (24 slides). |
 | `02-Documents/01-Executive-Summary.docx` / `.pdf` | Executive summary and the decisions requested. |
 | `02-Documents/02-Models-A-B-C-Comparison.docx` / `.pdf` | Side-by-side comparison of Models A, B and C. |
 | `02-Documents/03-Appendix-Badges-Levels-Transition.docx` / `.pdf` | Appendix on badges, levels and the transition plan. |
