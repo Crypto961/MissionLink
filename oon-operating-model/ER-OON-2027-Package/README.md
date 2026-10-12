@@ -17,7 +17,7 @@ Models A and B are included for comparison.
 | `02-Documents/05-Training-Academy-Curriculum.docx` / `.pdf` | Training Academy curriculum and badge program. |
 | `02-Documents/06-Appendix-Manager-Portfolios.docx` / `.pdf` | Appendix on manager portfolios. |
 | `02-Documents/07-Model-B-Automation-First.docx` / `.pdf` | Model B (automation-first) write-up. |
-| `03-Infographic/ER-OON-Operating-Model-2027-Infographic.pdf` | One-page infographic, PDF. |
+| `03-Infographic/ER-OON-Operating-Model-2027-Infographic.pdf` | Executive infographic, PDF. |
 | `03-Infographic/ER-OON-Operating-Model-2027-Infographic.html` | Same infographic as a standalone web page. Open it in a browser. |
 | `04-Web-Apps/Model-A-Operating-Model/Code.gs` | Apps Script server code for the Model A web app. |
 | `04-Web-Apps/Model-A-Operating-Model/Index.html` | Page for the Model A web app. |
