@@ -991,7 +991,7 @@
         /* --- Model B additions --- */
         .kpi .num.gain { color: #34D399; font-size: 28px; }
 
-        .idea-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+        .idea-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
         .idea { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
         .idea b { font-size: 15px; }
         .idea > span:last-child { font-size: 13px; color: var(--text-secondary); }
@@ -1056,7 +1056,7 @@
         .g-mark { position: absolute; top: -210px; bottom: 0; width: 0; border-left: 2px dashed var(--functional-red); }
         .marker-row em { position: absolute; top: 4px; transform: translateX(8px); font-size: 12px; font-style: normal; font-weight: 700; color: #B3121A; white-space: nowrap; }
 
-        .pay-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+        .pay-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
         .pay-card { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
         .pay-card b { font-size: 15px; }
         .pay-card span { font-size: 14px; color: var(--primary-navy); }
@@ -1196,13 +1196,13 @@
             </div>
             <p class="eyebrow" style="margin-top:34px;">ER Out-of-Network Revenue Cycle</p>
             <h1>Model B: Automation-First</h1>
-            <p class="lead">Lebanon delivers every IDR Gateway action as a ready-to-submit bundle. A 3-person US desk checks and files it in about 10 minutes, using a Submission Cockpit instead of typing. Teams share in the recovery they create.</p>
+            <p class="lead">Lebanon delivers every IDR Gateway action as a ready-to-submit bundle. A 3-person US desk checks and files it in about 10 minutes, using a Submission Cockpit instead of typing.</p>
 
             <div class="kpis">
                 <div class="kpi"><div class="num">3</div><div class="label">US staff instead of 7</div></div>
                 <div class="kpi"><div class="num">~10<span class="unit"> min</span></div><div class="label">US filing time per dispute, down from about 47</div></div>
-                <div class="kpi"><div class="num gain">$140–160K</div><div class="label">Saved per year at today's volume</div></div>
-                <div class="kpi"><div class="num gain">$0.41–0.5M</div><div class="label">Saved per year by year two</div></div>
+                <div class="kpi"><div class="num gain">$154–177K</div><div class="label">Saved per year at today's volume</div></div>
+                <div class="kpi"><div class="num gain">$0.45–0.55M</div><div class="label">Saved per year by year two</div></div>
                 <div class="kpi"><div class="num">$0</div><div class="label">Recruiting fees or new infrastructure: hiring is in-house, systems already exist</div></div>
             </div>
 
@@ -1218,7 +1218,7 @@
             <a href="#structure">Structure</a>
             <a href="#jds">Roles</a>
             <a href="#schedule">Schedule</a>
-            <a href="#pay">Pay</a>
+            <a href="#pay">Benefits</a>
             <a href="#tools">Tools</a>
             <a href="#cost">Cost</a>
             <a href="#rollout">Rollout</a>
@@ -1233,7 +1233,7 @@
         <section class="block" id="ideas">
             <div class="section-head">
                 <p class="eyebrow">Ideas we weighed</p>
-                <h2>Ten unconventional ideas: seven in, one conditional, two rejected</h2>
+                <h2>Eight unconventional ideas: five in, one conditional, two rejected</h2>
                 <p>The mirror bot is the one idea we won't build. It would let Lebanon operate the Gateway through a US PC, which is the access the onshore rule removes. The Cockpit reaches the same 3-person target with a US person genuinely doing the work.</p>
             </div>
             <div class="idea-grid">
@@ -1244,8 +1244,6 @@
                 <div class="idea yes"><span class="verdict v-yes">In</span><b>AI dispute factory</b><span>AI drafts packets, reports and offers; specialists approve them</span></div>
                 <div class="idea yes"><span class="verdict v-yes">In</span><b>AI determination reader</b><span>Outcomes logged in ClickUp overnight</span></div>
                 <div class="idea yes"><span class="verdict v-yes">In</span><b>Three staggered US shifts</b><span>12 hours of filing a day with 3 people</span></div>
-                <div class="idea yes"><span class="verdict v-yes">In</span><b>Team gainshare pool</b><span>Teams share recovery above baseline, capped</span></div>
-                <div class="idea yes"><span class="verdict v-yes">In</span><b>Bounty board</b><span>Pays per work unit to clear claims over 90 days old</span></div>
                 <div class="idea no"><span class="verdict v-no">Rejected</span><b>US gig marketplace</b><span>PHI, training and control risks are too high</span></div>
             </div>
         </section>
@@ -1342,7 +1340,6 @@
                         <h4>What changes inside each team</h4>
                         <div class="mini-tree">
                             <div class="tier"><span class="tag">Specialists</span><span>Review and approve AI drafts instead of writing from scratch; target 0.33 specialists per daily visit</span></div>
-                            <div class="tier"><span class="tag">Team pay</span><span>Gainshare pool and bounty board on top of base pay</span></div>
                         </div>
                     </div>
                 </div>
@@ -1381,32 +1378,32 @@
             </div>
             <div class="jd-grid">
                 <div class="card jd">
-                    <div class="jd-top"><span class="jd-loc us-tag">United States · 1</span><h3>Submission Lead</h3><p class="jd-pay">$27–32/hour · up to 10% bonus · full benefits</p></div>
+                    <div class="jd-top"><span class="jd-loc us-tag">United States · 1</span><h3>Submission Lead</h3><p class="jd-pay">Direct hire · full benefits · remote work</p></div>
                     <p class="jd-purpose">Owns same-day filing and Gateway compliance in the US.</p>
                     <h4>Duties</h4><ul><li>Files bundles about half the time</li><li>Assigns the queue and plans coverage</li><li>Manages credentials, MFA and access reviews</li><li>Audits session recordings daily</li></ul>
                     <h4>Requirements</h4><p>3+ years in healthcare revenue cycle or payer portals; NSA/IDR experience preferred; HIPAA-trained; based in the US</p>
                     <h4>KPIs</h4><p>100% same-day filing · zero errors reaching the Gateway · backlog under 1 day</p>
                 </div>
                 <div class="card jd">
-                    <div class="jd-top"><span class="jd-loc us-tag">United States · 2</span><h3>Submission Specialist</h3><p class="jd-pay">$21–25/hour · up to 10% bonus · full benefits</p></div>
+                    <div class="jd-top"><span class="jd-loc us-tag">United States · 2</span><h3>Submission Specialist</h3><p class="jd-pay">Direct hire · full benefits · remote work</p></div>
                     <p class="jd-purpose">Files Gateway actions from bundles, accurately and on the same day.</p>
                     <h4>Duties</h4><ul><li>Works the Cockpit queue during the shift</li><li>Checks every field against the checklist, then submits</li><li>Records fees; downloads determinations</li><li>Returns any mismatch within 15 minutes</li></ul>
                     <h4>Requirements</h4><p>1–2 years of healthcare or insurance data entry; passes a 99% accuracy test; HIPAA-trained; based in the US</p>
                     <h4>KPIs</h4><p>About 40 disputes' worth of actions per shift · error rate under 0.5% · same-day completion</p>
                 </div>
                 <div class="card jd">
-                    <div class="jd-top"><span class="jd-loc">Lebanon · 2</span><h3>Automation Analyst</h3><p class="jd-pay">L3 band $1,400–1,800 + $100/month allowance</p></div>
+                    <div class="jd-top"><span class="jd-loc">Lebanon · 2</span><h3>Automation Analyst</h3><p class="jd-pay">Drawn from existing L3 staff</p></div>
                     <p class="jd-purpose">Keeps bundles and AI drafts accurate and fast.</p>
                     <h4>Duties</h4><ul><li>Maintains a bundle template for each Gateway action</li><li>Keeps the AI prompt library versioned</li><li>Builds ClickUp automations</li><li>Fixes Cockpit mappings when the Gateway changes</li></ul>
                     <h4>Requirements</h4><p>L3 Senior Specialist I, or a strong L2 holding B2; A5 Innovation preferred; confident with ClickUp and spreadsheets; scripting a plus</p>
                     <h4>KPIs</h4><p>Bundle defects under 2% · at least 80% of AI drafts accepted · mapping fixes within 1 day</p>
                 </div>
                 <div class="card jd">
-                    <div class="jd-top"><span class="jd-loc">Lebanon · opt-in rota</span><h3>Bridge night rota (Bundle QA)</h3><p class="jd-pay">Regular level pay + $300–3,000/quarter rota bonus</p></div>
+                    <div class="jd-top"><span class="jd-loc">Lebanon · opt-in rota</span><h3>Bridge night rota (Bundle QA)</h3><p class="jd-pay">Regular role + $300–3,000/quarter from the rota pool</p></div>
                     <p class="jd-purpose">Nothing reaches the US desk unless it is ready to file. Team leads no longer staff the bridge.</p>
                     <h4>Who and when</h4><p>Any L2, L3 or L4 holding B2 can opt in; each night has at least one A2 holder as night lead. 16:00–24:00 Beirut (08:00–16:00 CT), Monday to Friday, 2 members a night. The rota is set each quarter from the opt-ins: 10 members at 1 night a week, up to 20 at 1 night every other week.</p>
                     <h4>Duties</h4><ul><li>Checks every bundle against the checklist before release</li><li>Answers the US desk within 15 minutes</li><li>Fixes rejected bundles the same US day</li><li>Posts the nightly handover log</li></ul>
-                    <h4>Bonus</h4><p>A fixed $30,000 pool a quarter shared equally, $300–3,000 per member (about $230 per night worked). Full share when the rota hits 98% first pass, 15-minute answers and no deadline missed because of a bundle, and the member works all assigned nights; missed nights reduce it pro rata.</p>
+                    <h4>Rota pool</h4><p>A fixed $30,000 pool a quarter shared equally, $300–3,000 per member (about $230 per night worked). Full share when the rota hits 98% first pass, 15-minute answers and no deadline missed because of a bundle, and the member works all assigned nights; missed nights reduce it pro rata.</p>
                 </div>
             </div>
         </section>
@@ -1442,19 +1439,13 @@
         <!-- PAY -->
         <section class="block" id="pay">
             <div class="section-head">
-                <p class="eyebrow">Pay and benefits</p>
-                <h2>More pay for results, less for headcount</h2>
-                <p>Levels and base pay bands are the same as Model A. Everything else below is new, and each item has a guardrail.</p>
+                <p class="eyebrow">Benefits</p>
+                <h2>A non-cash package for the US desk, and the night rota pool</h2>
+                <p>Levels follow Model A. No one's pay goes down, and every move up a level comes with a pay raise.</p>
             </div>
             <div class="pay-grid">
-                <div class="pay-card"><b>Levels and bands · same as Model A</b><span>L0 $1,000–1,100 · L1 $1,000–1,300 · L2 $1,200–1,550 · L3 $1,400–1,800 · L4 $1,600–2,000 · Team Lead (L5) $1,400–2,000 · Manager (L5) $2,000–3,000 per month. $50 a month per A badge, up to 2</span><em>Guardrail: level follows the 15 badges held; L3–L5 need a leveling test</em></div>
                 <div class="pay-card"><b>US package</b><span>Direct hire, health benefits, 15 days' paid leave, remote work on an existing company device</span><em>Guardrail: US-only devices and network; session recording on</em></div>
-                <div class="pay-card gain-card"><b>US quarterly bonus · up to 10%</b><span>Same-day completion, error rate, backlog</span><em>Guardrail: nothing paid in a quarter with a filing error that cost a deadline</em></div>
-                <div class="pay-card gain-card"><b>Team gainshare · 3% of uplift</b><span>3% of the team's Net Recovery above its baseline quarter, split by work units × quality</span><em>Guardrail: capped at 15% of quarterly base; each missed deadline cuts 25%; coding never paid on dollars</em></div>
-                <div class="pay-card gain-card"><b>Bounty board · $3 per unit</b><span>Claims over 90 days old, closed outside regular work</span><em>Guardrail: up to $150 a month; quality of 95% or higher</em></div>
-                <div class="pay-card"><b>Automation allowance · $100/month</b><span>Automation Analysts, on top of the L3 band</span><em>Guardrail: bundle defect rate under 2%</em></div>
                 <div class="pay-card gain-card"><b>Bridge night rota · $300–3,000/quarter</b><span>$30,000 pool a quarter shared equally by the rota; up to $120,000 a year</span><em>Guardrail: full share only when rota targets are met; missed nights reduce it pro rata</em></div>
-                <div class="pay-card"><b>Learning stipend · $200/year</b><span>Toward external courses (coding, AI tools), for everyone</span><em>Guardrail: requires passing the course</em></div>
             </div>
         </section>
 
@@ -1475,7 +1466,7 @@
                         <tr><td><b>AI drafting</b></td><td>Packets, medical-necessity reports, offer letters for approval</td><td>Buy, with BAA</td><td>12,000–30,000/year</td><td>Jan 2027</td></tr>
                         <tr><td><b>AI determination reader</b></td><td>Turns determination PDFs into ClickUp fields overnight</td><td>Build in-house</td><td>Included</td><td>Mar 2027</td></tr>
                         <tr><td><b>US device security</b></td><td>Device management, screen recording, US-only network on existing devices</td><td>Configure</td><td>Staff time</td><td>Dec 2026</td></tr>
-                        <tr><td><b>Dashboards</b></td><td>Net Recovery, gainshare, bounty board, US queue</td><td>Configure</td><td>Low</td><td>Feb 2027</td></tr>
+                        <tr><td><b>Dashboards</b></td><td>Net Recovery, bundle quality, US queue</td><td>Configure</td><td>Low</td><td>Feb 2027</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1486,7 +1477,7 @@
             <div class="section-head">
                 <p class="eyebrow">Cost</p>
                 <h2>Model B costs 40–50% less onshore; Model C sits in between</h2>
-                <p>Midpoints shown; ranges beside each bar. Model C, the proposal, keeps a 5-person desk and saves about 70–80% of what Model B saves. US figures are approximate Texas market rates for direct hires, plus 25% for benefits and payroll taxes, not quotes. No recruiting fees or infrastructure costs: hiring is in-house and all three models run on existing systems. Model B's only extra one-time item is a legal review of the Cockpit (quote needed).</p>
+                <p>Midpoints shown; ranges beside each bar. Model C, the proposal, keeps a 5-person desk and saves about 60–75% of what Model B saves. US figures are approximate Texas market rates for direct hires, plus 25% for benefits and payroll taxes, not quotes. No recruiting fees or infrastructure costs: hiring is in-house and all three models run on existing systems. Model B's only extra one-time item is a legal review of the Cockpit (quote needed).</p>
             </div>
             <div class="card">
                 <div class="cost-rows" id="cost-rows"></div>
@@ -1510,7 +1501,7 @@
                 <div class="stage"><div class="when">Jan 1, 2027</div><h4>Gateway goes US-only</h4><p>Filed by Model A's desk</p><span class="gate critical">Hard regulatory deadline</span></div>
                 <div class="stage"><div class="when">Feb–Mar 2027</div><h4>Cockpit pilot</h4><p>20%, then 50% of volume, timed against manual entry</p><span class="gate">Gate 1 · Mar 15: ≤12 min, &lt;0.5% errors, 98% first pass, no missed deadlines</span></div>
                 <div class="stage"><div class="when">Mar–Apr 2027</div><h4>Step down to 3</h4><p>Hire the 3 permanent staff; let contracts end one at a time</p><span class="gate">Gate 2 · Apr 30: 4 weeks with backlog under 1 day</span></div>
-                <div class="stage"><div class="when">May 2027 on</div><h4>Scale the bold parts</h4><p>AI determination reader; gainshare and bounty board from Q3 on Feb–Apr baselines</p></div>
+                <div class="stage"><div class="when">May 2027 on</div><h4>Scale the bold parts</h4><p>AI determination reader live; the desk grows only on the backlog trigger</p></div>
             </div>
             <div class="kill">
                 <b>Kill switches: we return to Model A staffing if any of these happens</b>
@@ -1538,9 +1529,8 @@
                         <tr><td>One US absence cuts capacity by a third</td><td><span class="lvl h">High</span></td><td><span class="lvl h">High</span></td><td>2 trained on-call staff; leave rules; backlog kill switch</td></tr>
                         <tr><td>A Gateway screen change breaks the Cockpit's field mapping</td><td><span class="lvl m">Medium</span></td><td><span class="lvl m">Medium</span></td><td>Mapping fixed within 1 day; manual entry always available</td></tr>
                         <tr><td>AI drafts contain errors</td><td><span class="lvl m">Medium</span></td><td><span class="lvl h">High</span></td><td>Every draft approved by a specialist; weekly QA sample</td></tr>
-                        <tr><td>Gainshare pushes aggressive settlements</td><td><span class="lvl l">Low</span></td><td><span class="lvl m">Medium</span></td><td>Cap, quality multiplier, unchanged decision rights</td></tr>
                         <tr><td>A bundle defect spreads to many disputes</td><td><span class="lvl l">Low</span></td><td><span class="lvl h">High</span></td><td>100% bundle QA; fix the template, not just the case</td></tr>
-                        <tr><td>US team burns out at 40 disputes a shift</td><td><span class="lvl m">Medium</span></td><td><span class="lvl m">Medium</span></td><td>Bonus, remote work, pace review at Gate 2</td></tr>
+                        <tr><td>US team burns out at 40 disputes a shift</td><td><span class="lvl m">Medium</span></td><td><span class="lvl m">Medium</span></td><td>Remote work, staggered shifts, pace review at Gate 2</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1583,9 +1573,9 @@
 
                 // Cost comparison: annual cost in $K, low/high per model
                 var cost = [
-                    { label: 'Today', a: [346, 421], b: [206, 261], c: [252, 307], save: '$140–160K', saveC: '$94–114K' },
-                    { label: 'Year 1', a: [580, 707], b: [331, 408], c: [393, 478], save: '$249–299K', saveC: '$187–229K' },
-                    { label: 'Year 2', a: [861, 1050], b: [452, 551], c: [533, 650], save: '$409–499K', saveC: '$328–400K' }
+                    { label: 'Today', a: [346, 421], b: [192, 244], c: [252, 307], save: '$154–177K', saveC: '$94–114K' },
+                    { label: 'Year 1', a: [580, 707], b: [302, 374], c: [393, 478], save: '$278–333K', saveC: '$187–229K' },
+                    { label: 'Year 2', a: [861, 1050], b: [412, 504], c: [533, 650], save: '$449–546K', saveC: '$328–400K' }
                 ];
                 var max = 1250;
                 var rows = document.getElementById('cost-rows');
