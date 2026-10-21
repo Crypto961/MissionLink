@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; color: #003B5C; font-size: 11px; margin: 24px; }
+    .top { border-bottom: 3px solid #00A3E0; padding-bottom: 10px; margin-bottom: 14px; }
+    .internal { background: #FEF3DC; color: #6B4A00; font-weight: bold; padding: 6px 10px; margin: 8px 0 14px; }
+    h1 { font-size: 18px; margin: 4px 0; }
+    h2 { font-size: 13px; margin: 18px 0 6px; border-bottom: 1px solid #DCE3EA; padding-bottom: 4px; }
+    .meta td { padding: 2px 12px 2px 0; vertical-align: top; }
+    .meta td:first-child { color: #475569; }
+    table.items { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.items th { background: #003B5C; color: #fff; text-align: left; padding: 6px; font-size: 10px; }
+    table.items td { border-bottom: 1px solid #DCE3EA; padding: 6px; vertical-align: top; }
+    .files li { margin: 2px 0; }
+    .foot { margin-top: 18px; color: #475569; font-size: 10px; border-top: 1px solid #DCE3EA; padding-top: 8px; }
+  </style>
+</head>
+<body>
+  <? var d = data.dispute; ?>
+  <div class="top">
+    <h1>Notice of IDR Initiation: Summary of Qualified Items and/or Services</h1>
+    <div><?= data.appName ?> · Dispute <?= data.id ?></div>
+  </div>
+  <div class="internal">Internal preparation record. This is not a CMS submission and was not sent to the federal IDR portal.</div>
+
+  <h2>Dispute</h2>
+  <table class="meta">
+    <tr><td>Health Insurance Plan or Company</td><td><?= d.plan_name ?></td></tr>
+    <tr><td>Plan is a(n)</td><td><?= d.plan_role ?></td></tr>
+    <tr><td>Health Plan Type</td><td><?= d.q_plan_type ?></td></tr>
+    <tr><td>Provider or facility</td><td><?= d.prov_name ?><?= d.prov_group_name ? ' (' + d.prov_group_name + ')' : '' ?></td></tr>
+    <tr><td>Health Care Designation</td><td><?= d.prov_designation ?></td></tr>
+    <tr><td>Tax ID / NPI</td><td><?= d.tin ?> / <?= d.npi ?></td></tr>
+    <tr><td>What are you disputing today?</td><td><?= d.dispute_kind ?></td></tr>
+    <tr><td>Open negotiation start date</td><td><?= fmt_(d.on_start_date, 'date') ?></td></tr>
+    <? if (data.deadline) { ?>
+    <tr><td>Open negotiation ends / initiate by</td><td><?= fmt_(data.deadline.onEnds, 'date') ?> / <?= fmt_(data.deadline.initiateBy, 'date') ?></td></tr>
+    <? } ?>
+    <tr><td>Consent to waive protections</td><td><?= d.consent_waiver ?></td></tr>
+    <tr><td>Team / owner</td><td><?= [d.Team, d.Owner].filter(String).join(' / ') ?></td></tr>
+  </table>
+
+  <h2>Summary of Qualified Items and/or Services (<?= data.lines.length ?>)</h2>
+  <table class="items">
+    <tr>
+      <th>#</th>
+      <? data.columns.forEach(function (c) { ?><th><?= c.label ?></th><? }); ?>
+    </tr>
+    <? data.lines.forEach(function (l) { ?>
+      <tr>
+        <td><?= l.LineNo ?></td>
+        <? data.columns.forEach(function (c) { ?><td><?= fmt_(l[c.key], c.type) ?></td><? }); ?>
+      </tr>
+    <? }); ?>
+  </table>
+
+  <table class="meta" style="margin-top:12px">
+    <tr><td>Certified IDR entity legal business name</td><td><?= d.idr_entity ?></td></tr>
+    <tr><td>Third Party Attestation</td><td><?= d.third_party_attest ?></td></tr>
+    <tr><td>Signature</td><td><?= d.prov_name ?> (signed and dated by the US desk in the portal)</td></tr>
+  </table>
+
+  <? if (data.warnings && data.warnings.length) { ?>
+  <h2>Checks noted (not blocking)</h2>
+  <ul class="files">
+    <? data.warnings.forEach(function (w) { ?><li><?= w ?></li><? }); ?>
+  </ul>
+  <? } ?>
+
+  <h2>Documents in the dispute folder</h2>
+  <ul class="files">
+    <? data.files.filter(function (f) { return f.Category !== 'confirmation_pdf'; }).forEach(function (f) { ?>
+      <li><?= f.Category === 'qpa' ? 'Line ' + f.LineNo + ' QPA documentation' : f.Category === 'on_evidence' ? 'Open negotiation evidence' : 'Additional supporting documentation' ?>: <?= f.Name ?></li>
+    <? }); ?>
+  </ul>
+
+  <div class="foot">Prepared by <?= data.generatedBy ?> on <?= data.generatedAt ?>. Last edited by <?= d.UpdatedBy ?> at <?= d.UpdatedAt ?>.</div>
+</body>
+</html>

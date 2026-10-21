@@ -7,43 +7,32 @@
  *   demoUseLebanonView() removes you from the US desk (Lebanon entry view)
  *   clearDemoData()     deletes every demo dispute, its rows and its Drive folder
  *
- * All names, addresses, claims and documents are made up. Demo disputes use ids that
- * start with IDR-DEMO- so they are easy to spot and remove.
+ * Claims, amounts, dates, people and documents are made up. The payers, billing entities,
+ * IDR entities and service codes come from the seeded lists, so Insights and the learned
+ * defaults show realistic trends. Demo disputes use ids that start with IDR-DEMO- and
+ * claim numbers that start with DEMO-, so they are easy to spot and remove.
  */
 
 const DEMO_PREFIX = 'IDR-DEMO-';
 
-const DEMO_PLANS = [
-  { name: 'Lone Star Benefit Plan (Demo)', role: 'Group Health Plan', city: 'Austin', zip: '78701' },
-  { name: 'Northwind Health Insurance Co (Demo)', role: 'Individual health insurance issuer', city: 'Houston', zip: '77002' },
-  { name: 'Bluebonnet Employer Trust (Demo)', role: 'Group Health Plan', city: 'Dallas', zip: '75201' },
-  { name: 'Prairie Mutual Health (Demo)', role: 'Individual health insurance issuer', city: 'San Antonio', zip: '78205' },
-  { name: 'Federal Employee Sample Carrier (Demo)', role: 'Federal Employees Health Benefits (FEHB) carrier', city: 'Fort Worth', zip: '76102' }
-];
-
-const DEMO_FACILITIES = ['Frisco', 'Denton', 'Cedar Hill', 'Garland', 'Weatherford', 'Desoto', 'Benbrook'];
 const DEMO_STREETS = ['Main St', 'Commerce St', 'Elm St', 'Congress Ave', 'Preston Rd', 'Camp Bowie Blvd', 'Lamar Blvd'];
-const DEMO_CODES = [
-  { code: '99285', desc: 'Emergency department visit, high severity' },
-  { code: '99284', desc: 'Emergency department visit, moderate-high severity' },
-  { code: '99283', desc: 'Emergency department visit, moderate severity' },
-  { code: '99291', desc: 'Critical care, first 30-74 minutes' },
-  { code: '71046', desc: 'Chest X-ray, 2 views' },
-  { code: '74177', desc: 'CT abdomen and pelvis with contrast' }
-];
 const DEMO_TEAMS = ['Team 1', 'Team 2', 'Team 3', 'Team 4', 'Team 5', 'Team 6', 'Team 7', 'Team 8', 'Team 9', 'Team 10'];
 const DEMO_OWNERS = ['R. Haddad', 'M. Khoury', 'J. Saad', 'L. Nassar', 'S. Aoun', 'N. Fares', 'K. Daher'];
 const DEMO_LEBANON_USERS = ['r.haddad@demo.example', 'm.khoury@demo.example', 'j.saad@demo.example'];
+// Used only when the ServiceCode list is empty (setup() not run yet).
+const DEMO_CODES_FALLBACK = [{ v: '99284', l: 'EMERGENCY ROOM SERVICE' }, { v: '94761', l: 'MEASURE BLOOD OXYGEN LEVEL' },
+  { v: 'A4670', l: 'AUTOMATIC BLOOD PRESSURE MONITOR' }, { v: 'A6413', l: 'ADHESIVE BANDAGE, FIRST-AID' }];
 
-// Which stage each demo dispute is left in, and how many line items it has.
+// Which stage each demo dispute is left in, how many line items it has, and what it shows.
 const DEMO_PLAN = [
   { stage: 'draft-q1', lines: 0 },
   { stage: 'draft-parties', lines: 0 },
   { stage: 'draft-lines', lines: 2 },
-  { stage: 'returned', lines: 3, reason: 'Line 2 QPA does not match the remittance advice. Please re-check the EOB and re-attach.' },
-  { stage: 'ready', lines: 1 },
-  { stage: 'ready', lines: 3 },
-  { stage: 'ready', lines: 5 },
+  { stage: 'returned', lines: 3, mismatch: 2, reason: 'Wrong amount',
+    details: 'Line 2: cost sharing plus initial payment does not equal the QPA. Re-check the EOB and re-attach.' },
+  { stage: 'ready', lines: 1, kind: 'Single dispute' },
+  { stage: 'ready', lines: 3, claims: 2, kind: 'Single dispute' }, // shows the "Single dispute" warning
+  { stage: 'ready', lines: 5, poc: true },
   { stage: 'ready', lines: 12 },
   { stage: 'filed', lines: 2 },
   { stage: 'filed', lines: 4 }
@@ -52,7 +41,7 @@ const DEMO_PLAN = [
 // ------------------------------------------------------------------ public functions
 
 function seedDemoData() {
-  if (!ss_().getSheetByName(TABS.disputes)) setup();
+  if (!ss_().getSheetByName(TABS.disputes) || !ss_().getSheetByName(TABS.settings)) setup();
   clearDemoData();
 
   // Rows are collected here and written once per tab at the end.
@@ -61,94 +50,107 @@ function seedDemoData() {
   const fileRecs = [];
   const logRecs = [];
   const needPdf = [];
-  const planTypes = options_().HealthPlanType || ['Fully insured group health plan'];
+  const lists = optionLists_();
+  const payers = (lists.Payer || []).filter(function (p) { return p.d; });
+  const entities = (lists.BillingEntity || []).filter(function (e) { return e.d; });
+  const idrEntities = options_().IdrEntity || ['Maximus Federal Services Inc'];
+  const codes = (lists.ServiceCode || []).length ? lists.ServiceCode : DEMO_CODES_FALLBACK;
+  const erCodes = codes.filter(function (c) { return /^9928/.test(c.v); });
+  const others = codes.filter(function (c) { return !/^9928/.test(c.v); });
+  if (!payers.length || !entities.length) throw new Error('Run setup() first: the Payer and BillingEntity lists are empty.');
   const me = currentUser_();
   const today = new Date();
 
   DEMO_PLAN.forEach(function (spec, i) {
     const id = DEMO_PREFIX + String(i + 1).padStart(3, '0');
-    const plan = DEMO_PLANS[i % DEMO_PLANS.length];
-    const facility = DEMO_FACILITIES[i % DEMO_FACILITIES.length];
-    const isFacility = i % 3 !== 2;
-    const designation = isFacility ? 'Health care facility' : 'Health care provider';
+    const payer = payers[i % payers.length];
+    // Three in four disputes are the facility, as on the notices seen so far.
+    const entity = entities[i % 4 === 3 && entities.length > 1 ? 1 : 0];
+    const ed = entity.d;
     const preparer = DEMO_LEBANON_USERS[i % DEMO_LEBANON_USERS.length];
     const created = daysAgo_(today, 12 - i);
-    const onStart = isoDate_(daysAgo_(today, 40 + i * 2));
+    // Open negotiation started 36 to 45 days ago, so every demo deadline is still ahead.
+    const onStart = isoDate_(daysAgo_(today, 36 + i));
     const folder = disputeFolder_(id);
 
-    // ---- header (pages 1-3)
+    // ---- header (pages 1-3 and the final page)
     const v = {
       DisputeID: id, Status: STATUS.draft, Team: pick_(DEMO_TEAMS, i), Owner: pick_(DEMO_OWNERS, i),
       CreatedBy: preparer, CreatedAt: stamp_(created), UpdatedBy: preparer, UpdatedAt: stamp_(daysAgo_(today, Math.max(0, 6 - i))),
       FolderUrl: folder.getUrl(),
-      q_prior_2022: 'No', q_acting_as: designation, q_plan_type: pick_(planTypes, i)
+      q_prior_2022: 'No', q_acting_as: ed.acting_as, tin: ed.tin, npi: ed.npi, q_plan_type: PLAN_TYPE_DEFAULT,
+      prov_name: entity.v
     };
     if (spec.stage !== 'draft-q1') {
-      Object.assign(v, { on_start_date: onStart, consent_waiver: 'No' });
+      Object.assign(v, { on_start_date: onStart, consent_waiver: 'No', dispute_kind: spec.kind || 'A batched dispute' });
       Object.assign(v, {
-        plan_role: plan.role, plan_name: plan.name,
-        plan_addr1: (100 + i * 37) + ' ' + pick_(DEMO_STREETS, i), plan_addr2: 'Suite ' + (200 + i),
-        plan_city: plan.city, plan_state: 'TX', plan_zip: plan.zip,
-        plan_email: 'idr.disputes' + (i + 1) + '@plan-demo.example', plan_phone: '512-555-01' + pad2_(i), plan_fax: '512-555-02' + pad2_(i),
-        plan_p1_name: 'Plan Dispute Analyst ' + (i + 1), plan_p1_email: 'analyst' + (i + 1) + '@plan-demo.example', plan_p1_phone: '512-555-03' + pad2_(i),
-        prov_designation: designation,
-        prov_p1_name: pick_(DEMO_OWNERS, i), prov_p1_addr1: (500 + i * 11) + ' ' + pick_(DEMO_STREETS, i + 3),
-        prov_p1_city: facility, prov_p1_state: 'TX', prov_p1_zip: '75' + String(100 + i * 7).slice(-3),
-        prov_p1_email: 'idr.team' + (i + 1) + '@er-demo.example', prov_p1_phone: '214-555-04' + pad2_(i)
+        plan_role: 'Group Health Plan', plan_name: payer.v,
+        plan_addr1: payer.d.addr1 || '', plan_city: payer.d.city || '', plan_state: payer.d.state || '', plan_zip: payer.d.zip || '',
+        plan_email: payer.d.email || '', plan_phone: payer.d.phone || '', plan_fax: payer.d.fax || '',
+        prov_group_name: ed.group_name || '', prov_designation: ed.acting_as,
+        prov_addr1: ed.addr1, prov_city: ed.city, prov_state: ed.state, prov_zip: ed.zip, prov_email: ed.email, prov_phone: ed.phone
       });
+      if (spec.poc) {
+        Object.assign(v, {
+          prov_p1_name: pick_(DEMO_OWNERS, i), prov_p1_addr1: (500 + i * 11) + ' ' + pick_(DEMO_STREETS, i + 3),
+          prov_p1_city: 'Fort Worth', prov_p1_state: 'TX', prov_p1_zip: '76132',
+          prov_p1_email: 'idr.team' + (i + 1) + '@er-demo.example', prov_p1_phone: '(817) 555-04' + pad2_(i)
+        });
+      }
     }
     if (spec.stage === 'draft-parties') {
       // Stopped part-way through the parties page.
-      ['prov_designation', 'prov_p1_name', 'prov_p1_addr1', 'prov_p1_city', 'prov_p1_state', 'prov_p1_zip', 'prov_p1_email', 'prov_p1_phone']
+      ['prov_designation', 'prov_addr1', 'prov_city', 'prov_state', 'prov_zip', 'prov_email', 'prov_phone']
         .forEach(function (k) { delete v[k]; });
+    }
+    if (spec.stage === 'returned' || spec.stage === 'ready' || spec.stage === 'filed') {
+      v.idr_entity = i % 4 === 1 ? idrEntities[1] || idrEntities[0] : idrEntities[0];
+      v.third_party_attest = 'No';
     }
 
     // ---- documents and line items
     if (spec.stage !== 'draft-q1') {
-      addDemoFile_(fileRecs, folder, id, 'on_evidence', '', 'Notice of Open Negotiation - ' + id + '.pdf',
-        'Notice of Open Negotiation', ['Sent to: ' + plan.name, 'Open negotiation start date: ' + onStart]);
+      addDemoFile_(fileRecs, folder, id, 'on_evidence', '', 'Open negotiation notice - ' + id + '.pdf',
+        'Notice of Open Negotiation', ['Sent to: ' + payer.v, 'Open negotiation start date: ' + onStart]);
     }
 
-    let eob = null;
+    // One claim per dispute (as on every notice seen), except where the plan asks for more.
+    const claimCount = spec.claims || 1;
+    const eobs = [];
     for (let n = 1; n <= spec.lines; n++) {
-      const c = DEMO_CODES[(i + n) % DEMO_CODES.length];
-      const qpa = money_(150 + rand_(i * 31 + n) * 1350);
-      const line = {
+      const claimNo = Math.min(claimCount, Math.ceil(n * claimCount / spec.lines));
+      const c = n === 1 ? pick_(erCodes.length ? erCodes : codes, i) : pick_(others.length ? others : codes, i * 3 + n);
+      const qpa = money_(n === 1 ? 450 + rand_(i * 31 + n) * 900 : 15 + rand_(i * 31 + n) * 400);
+      const cost = n === 1 && i % 3 === 0 ? money_(Number(qpa) * 0.1) : '0.00';
+      const initial = spec.mismatch === n ? money_(Number(qpa) * 0.5) : money_(Number(qpa) - Number(cost));
+      lineRecs.push({
         DisputeID: id, LineNo: n,
-        claim_number: 'CLM' + (70000 + i * 100 + n),
-        service_date: isoDate_(daysAgo_(today, 70 + i * 2 + n)),
-        description: c.desc,
-        qpa: qpa,
-        cost_sharing: money_(rand_(i + n) * 100),
-        initial_payment: money_(Number(qpa) * (0.4 + rand_(n * 7 + i) * 0.4)),
-        item_types: c.code.charAt(0) === '9' ? 'Emergency item(s)/service(s); Hospital-based service(s)' : 'Emergency item(s)/service(s); Professional service(s)',
-        other_desc: '',
-        service_code: c.code,
-        modifiers: c.code.charAt(0) === '9' ? '25' : '26',
-        pos_code: '23',
-        location: 'TX'
-      };
-      lineRecs.push(line);
-      // One synthetic EOB per dispute, attached to every line, keeps seeding fast.
-      if (!eob) {
-        eob = createDemoPdf_(folder, 'EOB and remittance - ' + id + '.pdf', 'Explanation of Benefits / Remittance Advice',
-          ['Payer: ' + plan.name, 'Claims in this file: ' + spec.lines]);
+        claim_number: 'DEMO-' + (70000 + i * 100 + claimNo),
+        service_date: isoDate_(daysAgo_(today, 70 + i * 2 + claimNo)),
+        description: c.l || 'EMERGENCY ROOM SERVICE',
+        qpa: qpa, cost_sharing: cost, initial_payment: initial,
+        item_types: 'Emergency item(s)/service(s)', other_desc: '',
+        service_code: c.v, modifiers: '', pos_code: '23', location: 'TX'
+      });
+      // One synthetic EOB per claim, attached to every line of that claim.
+      if (!eobs[claimNo]) {
+        eobs[claimNo] = createDemoPdf_(folder, 'EOB - ' + id + ' claim ' + claimNo + '.pdf', 'Explanation of Benefits / Remittance Advice',
+          ['Payer: ' + payer.v, 'Synthetic claim DEMO-' + (70000 + i * 100 + claimNo)]);
       }
+      const eob = eobs[claimNo];
       fileRecs.push({ DisputeID: id, Category: 'qpa', LineNo: n, Name: eob.getName(), Url: eob.getUrl(), FileId: eob.getId(),
         UploadedBy: preparer, UploadedAt: stamp_(created) });
     }
 
     // ---- stage-specific status
-    if (spec.stage === 'returned' || spec.stage === 'ready' || spec.stage === 'filed') {
-      if (spec.lines >= 5) {
-        addDemoFile_(fileRecs, folder, id, 'additional', '', 'Payer correspondence - ' + id + '.pdf', 'Additional supporting documentation',
-          ['Correspondence with ' + plan.name + ' during open negotiation.']);
-      }
+    if ((spec.stage === 'returned' || spec.stage === 'ready' || spec.stage === 'filed') && spec.lines >= 5) {
+      addDemoFile_(fileRecs, folder, id, 'additional', '', 'UB04 form - ' + id + '.pdf', 'Additional supporting documentation',
+        ['Synthetic claim form for ' + payer.v + '.']);
     }
     if (spec.stage === 'returned') {
       v.Status = STATUS.returned;
       v.ReadyAt = stamp_(daysAgo_(today, 3));
-      v.ReturnReason = spec.reason;
+      v.ReturnReason = spec.reason + ': ' + spec.details;
     }
     if (spec.stage === 'ready' || spec.stage === 'filed') {
       v.Status = STATUS.ready;
@@ -158,7 +160,7 @@ function seedDemoData() {
       v.Status = STATUS.filed;
       v.FiledBy = me;
       v.FiledAt = stamp_(daysAgo_(today, 2));
-      v.PortalDisputeNumber = 'DISP-DEMO-' + (480000 + i * 17);
+      v.PortalDisputeNumber = 'DISP-0' + (480000 + i * 17); // synthetic, in the portal's DISP-1234567 format
     }
 
     disputeRecs.push(v);
@@ -170,19 +172,37 @@ function seedDemoData() {
   appendRecords_(TABS.lines, lineRecs);
   appendRecords_(TABS.files, fileRecs);
   appendRecords_(TABS.log, logRecs);
+  learnDemo_(disputeRecs, lineRecs);
 
   // The confirmation PDF is built from the saved rows, exactly as the app does it.
   needPdf.forEach(function (id) { setCells_(id, { ConfirmationPdfUrl: buildConfirmationPdf_(id) }); });
+  CacheService.getScriptCache().remove('defaults');
 
   Logger.log('Demo data ready: ' + DEMO_PLAN.length + ' disputes (' + DEMO_PREFIX + '001 to ' + DEMO_PREFIX + pad3_(DEMO_PLAN.length) + ').');
   Logger.log('You are ' + (isUsDesk_(me) ? 'on the US desk view.' : 'on the Lebanon view.') + ' Run demoUseUsView() or demoUseLebanonView() to switch.');
+}
+
+// The demo feeds the lists once (teams and owners appear as learned values, counts go up), so
+// Insights has something to show. Seeding again does not add to the counts a second time.
+function learnDemo_(disputes, lines) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('DEMO_LEARNED')) return;
+  const s = schema_();
+  const hf = headerFields_(s).concat(s.internal);
+  const lf = lineFields_(s);
+  withLock_(function () {
+    disputes.forEach(function (r) { learnRecord_(hf, r, {}, r); });
+    lines.forEach(function (r) { learnRecord_(lf, r, {}, r); });
+    learnFlush_();
+  });
+  props.setProperty('DEMO_LEARNED', nowStr_());
 }
 
 /** Puts your account on the US desk: opening a Ready dispute shows the copy desk. */
 function demoUseUsView() {
   const me = currentUser_();
   if (isUsDesk_(me)) { Logger.log(me + ' is already on the US desk view. Reload the web app.'); return; }
-  appendRecords_(TABS.options, [{ List: 'UsDeskUser', Value: me, Note: 'Added by demoUseUsView()' }]);
+  appendRecords_(TABS.options, [optionRecord_('UsDeskUser', me, { source: 'seed', addedBy: 'demoUseUsView()' })]);
   clearOptionsCache_();
   Logger.log(me + ' now sees the US desk view. Reload the web app.');
 }
@@ -195,7 +215,7 @@ function demoUseLebanonView() {
   Logger.log(removed ? me + ' now sees the Lebanon view. Reload the web app.' : me + ' was already on the Lebanon view.');
 }
 
-/** Removes every demo dispute: its rows in all tabs and its Drive folder. Real disputes are untouched. */
+/** Removes every demo dispute: its rows in all tabs and its Drive folder. Real disputes and the lists are untouched. */
 function clearDemoData() {
   [TABS.disputes, TABS.lines, TABS.files, TABS.log].forEach(function (name) {
     if (!ss_().getSheetByName(name)) return;
@@ -209,6 +229,7 @@ function clearDemoData() {
     if (f.getName().indexOf(DEMO_PREFIX) === 0) { f.setTrashed(true); cached.push('folder:' + f.getName()); }
   }
   if (cached.length) CacheService.getScriptCache().removeAll(cached);
+  CacheService.getScriptCache().remove('defaults');
   Logger.log('Demo data removed.');
 }
 
@@ -223,7 +244,7 @@ function addDemoFile_(fileRecs, folder, id, category, lineNo, name, title, lines
 
 function createDemoPdf_(folder, name, title, lines) {
   const html = '<html><body style="font-family:Arial;color:#003B5C">' +
-    '<p style="background:#FEF3DC;padding:8px;font-weight:bold">SYNTHETIC DEMO DOCUMENT - not a real claim, patient or payer</p>' +
+    '<p style="background:#FEF3DC;padding:8px;font-weight:bold">SYNTHETIC DEMO DOCUMENT - not a real claim or patient</p>' +
     '<h2>' + title + '</h2>' + lines.map(function (l) { return '<p>' + l + '</p>'; }).join('') + '</body></html>';
   const blob = HtmlService.createHtmlOutput(html).getBlob().getAs(MimeType.PDF).setName(name);
   return folder.createFile(blob);

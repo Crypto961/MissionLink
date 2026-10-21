@@ -159,12 +159,45 @@
     #busybar::before { content: ''; position: absolute; top: 0; bottom: 0; width: 35%; background: var(--primary-cyan); animation: busy-slide 1s ease-in-out infinite; }
     @keyframes busy-slide { from { left: -35%; } to { left: 100%; } }
 
+    /* learning: defaults, suggestions, address book */
+    .chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--cyan-tint); color: #006D96; margin-left: 6px; vertical-align: middle; }
+    .chip.learned { background: var(--green-tint); color: #0B7A57; }
+    .hint { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+    .hint:empty { display: none; }
+    .hint.ask { background: var(--gold-tint); color: #6B4A00; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+    .hint .link { font-size: 12px; }
+    .stop { background: var(--red-tint); border-left: 4px solid var(--functional-red); border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-weight: 600; color: #B3121A; }
+    .deadline { margin-top: 6px; font-size: 13px; background: var(--cyan-tint); border-radius: 8px; padding: 8px 10px; }
+    .deadline:empty { display: none; }
+    .deadline.red { background: var(--red-tint); color: #B3121A; font-weight: 600; }
+    .poc.collapsed .fields { display: none; }
+    .poc:not(.collapsed) .poc-toggle { display: none; }
+    .poc-toggle { margin-left: 8px; font-size: 13px; }
+    .sig { margin-top: 14px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }
+    .days-red { color: var(--functional-red); font-weight: 700; }
+    .warn ul, .okbox ul { margin: 6px 0 0; padding-left: 18px; }
+    .toast.warn { background: #8A5A00; }
+    .share { height: 8px; background: #E6EEF3; border-radius: 999px; overflow: hidden; min-width: 70px; }
+    .share i { display: block; height: 100%; background: var(--primary-cyan); }
+    .ins-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 16px; }
+    .ins-grid .card { padding: 16px; }
+    .ins-grid table.grid td, .ins-grid table.grid th { padding: 6px 8px; font-size: 13px; }
+    .admin-layout { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
+    .admin-lists { display: grid; gap: 4px; }
+    .admin-lists button { text-align: left; background: var(--white); border: 1px solid var(--line); color: var(--text-2); padding: 7px 10px; font-size: 13px; }
+    .admin-lists button.on { background: var(--primary-navy); color: var(--white); border-color: var(--primary-navy); }
+    table.grid input[type=text] { width: 100%; min-width: 120px; padding: 6px 8px; border: 1px solid #C5D0DA; border-radius: 6px; font: inherit; }
+    table.grid tr.hidden-row td { color: var(--neutral-slate); }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .row-actions button { padding: 5px 9px; font-size: 12px; }
+
     @media (max-width: 760px) {
       .f.half, .f.third, .f.quarter { grid-column: span 12; }
       .steps { grid-template-columns: repeat(2, 1fr); }
       .crow { grid-template-columns: 1fr auto; }
       .crow .l { grid-column: 1 / -1; }
       .finish { grid-template-columns: 1fr; }
+      .admin-layout { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -192,7 +225,8 @@
   (function () {
     // ---------------------------------------------------------------- state and server calls
     var BOOT = <?!= BOOT_JSON ?>;
-    var S = { lists: {}, boot: null, view: 'list', filter: 'Draft', id: null, d: {}, lines: [], files: [], page: 0, line: null, copied: {}, deskLine: 0 };
+    var S = { lists: {}, boot: null, view: 'list', filter: 'Draft', id: null, d: {}, lines: [], files: [], warnings: [], deadline: null,
+      page: 0, line: null, copied: {}, deskLine: 0, defaulted: {}, pending: {}, admin: { list: '', data: null }, insights: null };
     var app = document.getElementById('app');
     var loader = document.getElementById('loader-wrapper');
     var PAGES = ['q1', 'q2', 'parties', 'lines', 'final'];
@@ -210,12 +244,14 @@
       return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
     }
 
-    function toast(msg, isError) {
+    // kind: true or 'error' for errors, 'warn' for warnings.
+    function toast(msg, kind) {
       var t = document.getElementById('toast');
+      var cls = kind === 'warn' ? 'warn' : (kind ? 'error' : '');
       t.textContent = msg;
-      t.className = 'toast' + (isError ? ' error' : '');
+      t.className = 'toast' + (cls ? ' ' + cls : '');
       clearTimeout(toast.h);
-      toast.h = setTimeout(function () { t.className = 'toast hidden'; }, isError ? 7000 : 3000);
+      toast.h = setTimeout(function () { t.className = 'toast hidden'; }, cls ? 8000 : 3000);
     }
 
     function busy(on) {
@@ -229,6 +265,9 @@
       var cls = { 'Draft': 'b-draft', 'Ready for US desk': 'b-ready', 'Filed': 'b-filed', 'Returned': 'b-returned' }[status] || 'b-draft';
       return '<span class="badge ' + cls + '">' + esc(status) + '</span>';
     }
+
+    function isEmpty(v) { return v === '' || v == null; }
+    function today() { return (S.boot && S.boot.today) || new Date().toISOString().slice(0, 10); }
 
     // ---------------------------------------------------------------- formatting (portal formats)
 
@@ -249,10 +288,23 @@
       if (v === '' || v == null) return '';
       return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    // Phones are stored and shown the way the portal prints them: (817) 566-1232.
+    function normPhone(v) {
+      var s = String(v == null ? '' : v).trim();
+      var d = s.replace(/\D/g, '');
+      if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+      if (d.length !== 10 || /[^\d\s().+-]/.test(s)) return s;
+      return '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
+    }
+    function normZip(v) {
+      var s = String(v == null ? '' : v).trim();
+      return /^\d{9}$/.test(s) ? s.slice(0, 5) + '-' + s.slice(5) : s;
+    }
     // Value as it should be typed or pasted into the portal.
     function copyValue(f, v) {
       if (f.type === 'date') return portalDate(v);
       if (f.type === 'money') return money(v);
+      if (f.type === 'phone') return normPhone(v);
       return String(v == null ? '' : v);
     }
 
@@ -261,19 +313,197 @@
     function fieldRequired(f, rec) {
       return f.required || (f.requiredIf && String(rec[f.requiredIf.key] || '').indexOf(f.requiredIf.includes) !== -1);
     }
+    function isPlaceholder(v) { return /^(n\/?a|none|-+|\$)$/i.test(String(v).trim()); }
     function check(f, value, rec) {
       var v = value == null ? '' : String(value).trim();
-      if (!v) return fieldRequired(f, rec) ? 'Required' : '';
-      if (f.type === 'zip' && !/^\d{5}(-\d{4})?$/.test(v)) return 'Use 12345 or 12345-6789';
-      if (f.type === 'phone' && !/^\d{3}-\d{3}-\d{4}$/.test(v)) return 'Use 214-555-0100';
+      var req = fieldRequired(f, rec);
+      if (v && isPlaceholder(v) && f.type !== 'checkboxes') return req ? 'Required ("' + v + '" is not accepted)' : '';
+      if (!v) return req ? 'Required' : '';
+      if (f.digits) v = v.replace(/[\s-]/g, '');
+      if (f.pattern && !new RegExp(f.pattern).test(v)) { var pm = f.patternMsg || 'is not in the right format'; return pm.charAt(0).toUpperCase() + pm.slice(1); }
+      if (f.type === 'zip' && !/^\d{5}(-\d{4})?$/.test(normZip(v))) return 'Use 5 or 9 digits, like 76132 or 76132-1234';
+      if (f.type === 'phone' && !/^\(\d{3}\) \d{3}-\d{4}$/.test(normPhone(v))) return 'Use 10 digits, like (817) 566-1232';
       if (f.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return 'Not a valid email';
       if (f.type === 'money' && !/^\d+(\.\d{1,2})?$/.test(v)) return 'Use an amount like 154.00';
       if (f.type === 'date') {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'Enter a date';
         if (f.min && v < f.min) return 'Select a date after Dec 31, 2021';
-        if (f.max === 'today' && v > new Date().toISOString().slice(0, 10)) return 'Cannot be in the future';
+        if (f.max === 'today' && v > today()) return 'Cannot be in the future';
       }
       return '';
+    }
+
+    // ---------------------------------------------------------------- lists, typo protection and learned defaults
+
+    function entries(list) { return (S.boot.lists && S.boot.lists[list]) || []; }
+    function optionKey(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+    function entryFor(list, value) {
+      var k = optionKey(value);
+      if (!k) return null;
+      return entries(list).filter(function (o) { return o.v === value; })[0] ||
+        entries(list).filter(function (o) { return optionKey(o.v) === k; })[0] || null;
+    }
+    function editDistance(a, b) {
+      var prev = [], i, j;
+      for (j = 0; j <= b.length; j++) prev[j] = j;
+      for (i = 1; i <= a.length; i++) {
+        var cur = [i];
+        for (j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+        prev = cur;
+      }
+      return prev[b.length];
+    }
+    // Same rule as closestOption_ on the server: within 2 edits, ignoring case and punctuation; digits must match.
+    function closestOption(values, typed) {
+      var key = optionKey(typed);
+      if (!key || values.indexOf(typed) !== -1) return '';
+      var digits = function (s) { return s.replace(/\D/g, ''); };
+      var best = '', bestD = 3;
+      values.forEach(function (v) {
+        var k = optionKey(v);
+        if (!k || bestD === 0) return;
+        if (k === key) { best = v; bestD = 0; return; }
+        if (digits(k) !== digits(key)) return;
+        var d = editDistance(k, key);
+        if (d <= 2 && d < Math.min(k.length, key.length) / 2 && d < bestD) { best = v; bestD = d; }
+      });
+      return best;
+    }
+    function suggestFor(f, typed) {
+      var alias = ((S.boot.aliases || {})[f.options] || {})[optionKey(typed)];
+      if (alias && alias !== typed) return alias;
+      return closestOption(S.boot.options[f.options] || [], typed);
+    }
+    // A value saved in this session shows in the suggestions straight away (everyone else sees it on their next load).
+    function learnLocal(fields, rec) {
+      if (S.boot.learningMode === 'Off') return;
+      fields.forEach(function (f) {
+        if (f.type !== 'combo' || isEmpty(rec[f.key])) return;
+        (f.multi ? String(rec[f.key]).split(/[,;\s]+/) : [String(rec[f.key]).trim()]).forEach(function (v) {
+          if (!v || entryFor(f.options, v)) return;
+          (S.boot.lists[f.options] = S.boot.lists[f.options] || []).push({ v: v });
+          (S.boot.options[f.options] = S.boot.options[f.options] || []).push(v);
+        });
+      });
+    }
+
+    function defaultFor(key) { return (S.boot.defaults || {})[key] || null; }
+
+    // Empty fields that have a default get it (marked with a chip). A billing entity's profile goes first.
+    function applyDefaults(fields, rec) {
+      if (!editable()) return;
+      var take = function (f) {
+        var d = defaultFor(f.key);
+        if (!d || isEmpty(d.value) || !isEmpty(rec[f.key])) return false;
+        rec[f.key] = d.value;
+        S.defaulted[f.key] = true;
+        return true;
+      };
+      fields.forEach(function (f) { if (f.fill && take(f)) fillRecord(f, rec[f.key], rec, false); });
+      fields.forEach(function (f) { if (!f.fill) take(f); });
+    }
+
+    // ---------------------------------------------------------------- address book (profile fill)
+
+    function profileValue(f, entry, dk) {
+      var d = entry.d || {};
+      return dk === 'description' ? (d.description || entry.l || '') : (d[dk] || '');
+    }
+
+    // Fills the record only (fields not on screen). Fields of the header saved with the next page save.
+    function fillRecord(f, value, rec, overwrite) {
+      var e = entryFor(f.options, value);
+      if (!e || !f.fill) return 0;
+      var n = 0;
+      Object.keys(f.fill).forEach(function (dk) {
+        var v = profileValue(f, e, dk);
+        if (!v) return;
+        [].concat(f.fill[dk]).forEach(function (key) {
+          if (!overwrite && !isEmpty(rec[key])) return;
+          rec[key] = v;
+          if (rec === S.d) S.pending[key] = v;
+          n++;
+        });
+      });
+      return n;
+    }
+
+    // Fills the fields on screen, and the record for the others.
+    function fillForm(container, f, value, rec, overwrite) {
+      var e = entryFor(f.options, value);
+      if (!e || !f.fill) return 0;
+      var n = 0;
+      Object.keys(f.fill).forEach(function (dk) {
+        var v = profileValue(f, e, dk);
+        if (!v) return;
+        [].concat(f.fill[dk]).forEach(function (key) {
+          var box = container.querySelector('.f[data-key="' + key + '"]');
+          if (box) { if (setBoxValue(box, v, overwrite)) n++; return; }
+          if (!overwrite && !isEmpty(rec[key])) return;
+          rec[key] = v;
+          if (rec === S.d) S.pending[key] = v;
+          n++;
+        });
+      });
+      return n;
+    }
+
+    function setBoxValue(box, v, overwrite) {
+      var radios = box.querySelectorAll('input[type=radio]');
+      if (radios.length) {
+        var on = box.querySelector('input:checked');
+        var match = Array.prototype.filter.call(radios, function (r) { return r.value === v; })[0];
+        if (!match || (on && !overwrite)) return false;
+        match.checked = true;
+      } else {
+        var el = box.querySelector('input, select, textarea');
+        if (!el || (el.value.trim() && !overwrite)) return false;
+        if (el.tagName === 'SELECT' && !Array.prototype.some.call(el.options, function (o) { return o.value === v; })) return false;
+        el.value = v;
+      }
+      box.classList.remove('err');
+      box.querySelector('.msg').textContent = '';
+      dropChip(box);
+      return true;
+    }
+
+    function dropChip(box) {
+      var chip = box.querySelector('.chip[data-default]');
+      if (chip) chip.parentNode.removeChild(chip);
+      delete S.defaulted[box.getAttribute('data-key')];
+    }
+
+    // ---------------------------------------------------------------- deadlines (same rule as businessDeadline_)
+
+    var DAY = 86400000;
+    function holidaySet() {
+      if (S.hol) return S.hol;
+      S.hol = {};
+      entries('Holiday').forEach(function (o) { S.hol[String(o.v).slice(0, 10)] = true; });
+      return S.hol;
+    }
+    function isoToUtc(iso) { var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; }
+    function utcToIso(ms) { return new Date(ms).toISOString().slice(0, 10); }
+    function isBizDay(ms) { var wd = new Date(ms).getUTCDay(); return wd !== 0 && wd !== 6 && !holidaySet()[utcToIso(ms)]; }
+    function addBizDays(from, n) { var d = from; while (n > 0) { d += DAY; if (isBizDay(d)) n--; } return d; }
+    function bizDeadline(onStart) {
+      var start = isoToUtc(onStart);
+      if (start === null) return null;
+      var onEnds = addBizDays(start, 30), by = addBizDays(onEnds, 4), now = isoToUtc(today()), left = 0, d;
+      if (now <= by) { for (d = now; d <= by; d += DAY) if (isBizDay(d)) left++; }
+      else { for (d = by + DAY; d <= now && left > -400; d += DAY) if (isBizDay(d)) left--; }
+      return { onEnds: utcToIso(onEnds), initiateBy: utcToIso(by), daysLeft: left, opens: utcToIso(addBizDays(onEnds, 1)) };
+    }
+    function deadlineText(onStart) {
+      var dl = bizDeadline(onStart);
+      if (!dl) return '';
+      if (dl.daysLeft <= 0) {
+        return '<div class="deadline red">Deadline passed. Open negotiation ended ' + esc(portalDate(dl.onEnds)) + ' and the dispute had to be initiated by ' +
+          esc(portalDate(dl.initiateBy)) + '. It cannot go to the US desk.</div>';
+      }
+      return '<div class="deadline' + (dl.daysLeft <= 1 ? ' red' : '') + '">Open negotiation ends ' + esc(portalDate(dl.onEnds)) + '. Initiate by ' +
+        esc(portalDate(dl.initiateBy)) + ' (' + dl.daysLeft + ' business day' + (dl.daysLeft === 1 ? '' : 's') + ' left).' +
+        (today() <= dl.onEnds ? ' The portal accepts it from ' + esc(portalDate(dl.opens)) + '.' : '') + '</div>';
     }
 
     // ---------------------------------------------------------------- field rendering
@@ -288,39 +518,71 @@
       });
     }
 
+    // QPA files of other lines with this claim number: one EOB usually covers the whole claim.
+    function sameClaimDocs(claim, lineNo) {
+      claim = String(claim || '').trim();
+      if (!claim) return [];
+      var nums = S.lines.filter(function (l) { return Number(l.LineNo) !== Number(lineNo) && String(l.claim_number).trim() === claim; })
+        .map(function (l) { return Number(l.LineNo); });
+      var seen = {};
+      return S.files.filter(function (x) {
+        if (x.Category !== 'qpa' || nums.indexOf(Number(x.LineNo)) === -1 || seen[x.FileId]) return false;
+        seen[x.FileId] = true;
+        return true;
+      });
+    }
+
+    function chip(f, v) {
+      var d = defaultFor(f.key);
+      if (!S.defaulted[f.key] || !d || String(v) !== String(d.value)) return '';
+      var learned = d.source === 'learned';
+      return '<span class="chip' + (learned ? ' learned' : '') + '" data-default title="' +
+        esc(learned ? 'Used on ' + Math.round(d.share * 100) + '% of the last ' + d.sample + ' saves' : 'Starting default') + '">default</span>';
+    }
+
     function renderField(f, rec, lineNo) {
       var v = rec[f.key] == null ? '' : rec[f.key];
       var star = fieldRequired(f, rec) || f.required ? '<span class="req">*</span> ' : '';
       var width = f.width ? ' ' + f.width : '';
       var id = 'f_' + f.key;
+      var label = star + esc(f.label) + chip(f, v);
       var h = '<div class="f' + width + '" data-key="' + esc(f.key) + '">';
       if (f.type === 'radio' || f.type === 'checkboxes') {
         var picked = f.type === 'checkboxes' ? String(v).split(/;\s*/) : [String(v)];
-        h += '<div class="lbl">' + star + esc(f.label) + '</div><div class="choices">';
+        h += '<div class="lbl">' + label + '</div><div class="choices">';
         optionList(f).forEach(function (o, i) {
           h += '<label><input type="' + (f.type === 'radio' ? 'radio' : 'checkbox') + '" name="' + esc(f.key) + '" value="' + esc(o) + '"' +
             (picked.indexOf(o) !== -1 ? ' checked' : '') + '> ' + esc(o) + '</label>';
         });
         h += '</div>';
+        if (f.stop) h += '<div class="stop' + (String(v) === f.stop.value ? '' : ' hidden') + '" data-stop>' + esc(f.stop.message) + '. This dispute cannot go to the US desk.</div>';
       } else if (f.type === 'select') {
-        h += '<label for="' + id + '">' + star + esc(f.label) + '</label><select id="' + id + '" name="' + esc(f.key) + '"><option value="">Select an Option</option>';
+        h += '<label for="' + id + '">' + label + '</label><select id="' + id + '" name="' + esc(f.key) + '"><option value="">Select an Option</option>';
         optionList(f).forEach(function (o) { h += '<option' + (o === String(v) ? ' selected' : '') + '>' + esc(o) + '</option>'; });
         h += '</select>';
+      } else if (f.type === 'combo') {
+        h += '<label for="' + id + '">' + label + '</label><input type="text" id="' + id + '" name="' + esc(f.key) + '" value="' + esc(v) + '" list="dl_' + esc(f.key) +
+          '" autocomplete="off"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '><datalist id="dl_' + esc(f.key) + '">' +
+          entries(f.options).map(function (o) { return '<option value="' + esc(o.v) + '"' + (o.l ? ' label="' + esc(o.v + ' · ' + o.l) + '"' : '') + '></option>'; }).join('') +
+          '</datalist><div class="hint" data-hint></div>';
       } else if (f.type === 'textarea') {
-        h += '<label for="' + id + '">' + star + esc(f.label) + '</label><textarea id="' + id + '" name="' + esc(f.key) + '">' + esc(v) + '</textarea>';
+        h += '<label for="' + id + '">' + label + '</label><textarea id="' + id + '" name="' + esc(f.key) + '">' + esc(v) + '</textarea>';
       } else if (f.type === 'file') {
         var list = filesFor(f.category, lineNo);
         h += '<div class="lbl">' + star + esc(f.label) + '</div><div class="upload">' +
           '<input type="file" multiple data-category="' + esc(f.category) + '" id="' + id + '">' +
+          (f.category === 'qpa' ? '<label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="same-claim" checked> Use for all lines with this claim number</label>' : '') +
           '<div class="note">Files go to this dispute\'s Drive folder for the US desk to upload. Under 45 MB each.</div>' +
-          '<div class="file-list" data-files="' + esc(f.category) + '">' + fileRows(list) + '</div></div>';
+          '<div class="file-list" data-files="' + esc(f.category) + '">' + fileRows(list) + '</div>' +
+          (f.category === 'qpa' ? '<div class="note" data-claim-docs></div>' : '') + '</div>';
       } else {
         var type = f.type === 'date' ? 'date' : (f.type === 'email' ? 'email' : 'text');
-        var extra = f.type === 'money' ? ' inputmode="decimal"' : '';
+        var extra = f.type === 'money' ? ' inputmode="decimal"' : (f.type === 'phone' || f.digits ? ' inputmode="tel"' : '');
         if (f.type === 'date' && f.min) extra += ' min="' + f.min + '"';
-        if (f.type === 'date' && f.max === 'today') extra += ' max="' + new Date().toISOString().slice(0, 10) + '"';
-        h += '<label for="' + id + '">' + star + esc(f.label) + '</label><input type="' + type + '" id="' + id + '" name="' + esc(f.key) + '" value="' + esc(v) + '"' +
+        if (f.type === 'date' && f.max === 'today') extra += ' max="' + today() + '"';
+        h += '<label for="' + id + '">' + label + '</label><input type="' + type + '" id="' + id + '" name="' + esc(f.key) + '" value="' + esc(v) + '"' +
           (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + extra + '>';
+        if (f.helper === 'deadline') h += '<div data-deadline>' + deadlineText(v) + '</div>';
       }
       return h + '<div class="msg"></div></div>';
     }
@@ -344,7 +606,11 @@
         } else if (f.type === 'checkboxes') {
           out[f.key] = Array.prototype.map.call(box.querySelectorAll('input:checked'), function (i) { return i.value; }).join('; ');
         } else {
-          out[f.key] = box.querySelector('input, select, textarea').value.trim();
+          var v = box.querySelector('input, select, textarea').value.trim();
+          if (f.type === 'phone') v = normPhone(v);
+          if (f.type === 'zip') v = normZip(v);
+          if (f.digits) v = v.replace(/[\s-]/g, '');
+          out[f.key] = v;
         }
       });
       return out;
@@ -367,6 +633,92 @@
       return bad;
     }
 
+    // A typed value that looks like a typo of a known one must be confirmed before it is saved as new.
+    function pendingSuggestion(container) {
+      var box = container.querySelector('.f[data-suggest]:not([data-kept])');
+      if (!box) return false;
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast('Check the suggested spelling first: use it, or keep what you typed.', true);
+      return true;
+    }
+
+    // Wires the learning helpers of a form: combos, defaults chips, phone format, hard stops, the deadline helper.
+    function wireForm(container, fields, rec) {
+      fields.forEach(function (f) {
+        var box = container.querySelector('.f[data-key="' + f.key + '"]');
+        if (!box) return;
+        var el = box.querySelector('input, select, textarea');
+        box.addEventListener('change', function () { dropChip(box); });
+        if (f.type === 'combo') {
+          el.addEventListener('change', function () { comboChanged(container, box, f, rec); });
+          if (f.fill && !isEmpty(rec[f.key])) showFillNote(container, box, f, rec, String(rec[f.key]), -1);
+        }
+        if (f.type === 'phone' || f.type === 'zip' || f.digits) {
+          el.addEventListener('blur', function () {
+            el.value = f.type === 'phone' ? normPhone(el.value) : f.type === 'zip' ? normZip(el.value) : el.value.replace(/[\s-]/g, '');
+          });
+        }
+        if (f.stop) {
+          box.addEventListener('change', function () {
+            var on = box.querySelector('input:checked');
+            box.querySelector('[data-stop]').classList.toggle('hidden', !(on && on.value === f.stop.value));
+          });
+        }
+        if (f.helper === 'deadline') {
+          var upd = function () { box.querySelector('[data-deadline]').innerHTML = deadlineText(el.value); };
+          el.addEventListener('change', upd);
+          el.addEventListener('input', upd);
+        }
+      });
+    }
+
+    function comboChanged(container, box, f, rec) {
+      var el = box.querySelector('input');
+      var hint = box.querySelector('[data-hint]');
+      var v = el.value.trim();
+      box.removeAttribute('data-suggest');
+      box.removeAttribute('data-kept');
+      hint.className = 'hint';
+      hint.innerHTML = '';
+      if (!v) return;
+      var s = f.multi ? '' : suggestFor(f, v);
+      if (s) {
+        box.setAttribute('data-suggest', s);
+        hint.className = 'hint ask';
+        hint.innerHTML = 'Did you mean <b>' + esc(s) + '</b>? <button class="link" data-use>Use it</button> · <button class="link" data-keep>Keep "' + esc(v) + '"</button>';
+        hint.querySelector('[data-use]').addEventListener('click', function (e) {
+          e.preventDefault();
+          el.value = s;
+          comboChanged(container, box, f, rec);
+        });
+        hint.querySelector('[data-keep]').addEventListener('click', function (e) {
+          e.preventDefault();
+          box.setAttribute('data-kept', '1');
+          hint.className = 'hint';
+          hint.textContent = 'New value: it is added to the list when you save.';
+        });
+        return;
+      }
+      if (f.fill && entryFor(f.options, v)) { showFillNote(container, box, f, rec, v, fillForm(container, f, v, rec, false)); return; }
+      var known = f.multi ? String(v).split(/[,;\s]+/).every(function (x) { return !x || entryFor(f.options, x); }) : !!entryFor(f.options, v);
+      if (!known) hint.textContent = 'New value: it is added to the list when you save.';
+    }
+
+    // n: fields just filled (-1 when only offering a refill).
+    function showFillNote(container, box, f, rec, value, n) {
+      var e = entryFor(f.options, value);
+      var hint = box.querySelector('[data-hint]');
+      if (!e || !e.d) return;
+      hint.className = 'hint';
+      hint.innerHTML = (n > 0 ? 'Filled from the address book (' + n + ' field' + (n === 1 ? '' : 's') + '). ' : n === 0 ? 'In the address book. ' : '') +
+        '<button class="link" data-refill>Refill from ' + esc(e.v) + '</button>';
+      hint.querySelector('[data-refill]').addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var m = fillForm(container, f, e.v, rec, true);
+        hint.innerHTML = 'Filled from the address book (' + m + ' field' + (m === 1 ? '' : 's') + ').';
+      });
+    }
+
     function pageFields(page) {
       var all = [];
       page.sections.forEach(function (s) { all = all.concat(s.fields); });
@@ -387,20 +739,22 @@
     }
 
     // Files go up in parallel; each reply carries the dispute's file list, merged here.
-    function uploadAll(files, category, lineNo) {
+    function uploadAll(files, category, lineNo, sameClaim) {
       var big = files.filter(function (f) { return f.size > 45 * 1024 * 1024; })[0];
       if (big) return Promise.reject(new Error(big.name + ' is over 45 MB.'));
       return Promise.all(files.map(function (file) {
         return readAsBase64(file).then(function (b64) {
-          return call('uploadFile', S.id, category, lineNo || '', file.name, file.type, b64);
+          return call('uploadFile', S.id, category, lineNo || '', file.name, file.type, b64, !!sameClaim);
         });
       })).then(function (replies) {
+        // The last reply has every row (all uploads finished); rows from the others are merged in case of overlap.
         var seen = {};
-        S.files = S.files.concat.apply(S.files, replies.map(function (r) { return r.files; })).filter(function (f) {
-          if (seen[f.FileId]) return false;
-          seen[f.FileId] = true;
+        S.files = replies.reduce(function (all, r) { return all.concat(r.files); }, []).reverse().filter(function (f) {
+          var k = f.FileId + '|' + f.LineNo + '|' + f.Category;
+          if (seen[k]) return false;
+          seen[k] = true;
           return true;
-        });
+        }).reverse();
       });
     }
 
@@ -410,6 +764,7 @@
         box.innerHTML = fileRows(filesFor(box.getAttribute('data-files'), lineNo()));
       });
       wireRemoves(container, lineNo);
+      if (container.updateClaimDocs) container.updateClaimDocs();
     }
 
     function wireRemoves(container, lineNo) {
@@ -417,7 +772,7 @@
         b.addEventListener('click', function (e) {
           e.preventDefault();
           busy(true);
-          call('removeFile', S.id, b.getAttribute('data-remove-file'))
+          call('removeFile', S.id, b.getAttribute('data-remove-file'), lineNo() || '')
             .then(function (files) { S.files = files; busy(false); updateFileLists(container, lineNo); }).catch(fail);
         });
       });
@@ -430,9 +785,10 @@
           if (!input.files.length) return;
           var files = Array.prototype.slice.call(input.files);
           var cat = input.getAttribute('data-category');
+          var same = container.querySelector('#same-claim');
           busy(true);
           (beforeUpload ? beforeUpload() : Promise.resolve(lineNo()))
-            .then(function (ln) { return uploadAll(files, cat, ln); })
+            .then(function (ln) { return uploadAll(files, cat, ln, cat === 'qpa' && same && same.checked); })
             .then(function () { busy(false); input.value = ''; updateFileLists(container, lineNo); toast('Uploaded'); })
             .catch(fail);
         });
@@ -445,6 +801,7 @@
     // Every server action that changes a dispute replies with the updated dispute, so no second call is needed.
     function apply(bundle) {
       S.d = bundle.dispute; S.lines = bundle.lines; S.files = bundle.files;
+      S.warnings = bundle.warnings || []; S.deadline = bundle.deadline || null;
       S.lists = {}; // list counts and dates changed
     }
 
@@ -454,7 +811,7 @@
     }
 
     function open(id, view) {
-      S.id = id; S.copied = {}; S.deskLine = 0; S.line = null;
+      S.id = id; S.copied = {}; S.deskLine = 0; S.line = null; S.defaulted = {}; S.pending = {};
       busy(true);
       refresh().then(function () {
         busy(false);
@@ -465,24 +822,37 @@
       }).catch(fail);
     }
 
+    function warnBox(list, title) {
+      if (!list || !list.length) return '';
+      return '<div class="warn"><b>' + esc(title || 'Check before sending (these do not block):') + '</b><ul>' +
+        list.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul></div>';
+    }
+
     // ---------------------------------------------------------------- views
 
     function render() {
       window.scrollTo(0, 0);
       if (S.view === 'list') return renderList();
       if (S.view === 'desk') return renderDesk();
+      if (S.view === 'insights') return renderInsights();
+      if (S.view === 'admin') return renderAdmin();
       return renderEditor();
     }
 
     function renderList() {
       var filters = ['Draft', 'Returned', 'Ready for US desk', 'Filed', 'All'];
       app.innerHTML = '<div class="list-head"><div><h1>Disputes</h1><p class="sub">Prepare each Notice of IDR Initiation here, page by page, exactly as the portal asks for it.</p></div>' +
-        '<button class="primary" id="new">+ New dispute</button></div>' +
+        '<div class="right" style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" id="insights">Insights</button>' +
+        (S.boot.isAdmin ? '<button class="ghost" id="admin">Lists</button>' : '') +
+        '<button class="primary" id="new">+ New dispute</button></div></div>' +
         '<div class="filters">' + filters.map(function (f) { return '<button data-f="' + esc(f) + '"' + (S.filter === f ? ' class="on"' : '') + '>' + esc(f) + '</button>'; }).join('') + '</div>' +
         '<div id="rows" style="margin-top:12px"><p class="muted">Loading…</p></div>';
       app.querySelector('#new').addEventListener('click', function () {
-        S.id = null; S.d = { Status: 'Draft' }; S.lines = []; S.files = []; S.page = 0; S.view = 'edit'; render();
+        S.id = null; S.d = { Status: 'Draft' }; S.lines = []; S.files = []; S.warnings = []; S.deadline = null;
+        S.page = 0; S.view = 'edit'; S.defaulted = {}; S.pending = {}; render();
       });
+      app.querySelector('#insights').addEventListener('click', function () { S.view = 'insights'; render(); });
+      if (app.querySelector('#admin')) app.querySelector('#admin').addEventListener('click', function () { S.view = 'admin'; render(); });
       app.querySelectorAll('[data-f]').forEach(function (b) {
         b.addEventListener('click', function () { S.filter = b.getAttribute('data-f'); renderList(); });
       });
@@ -500,11 +870,13 @@
       var box = app.querySelector('#rows');
       if (!box) return;
       if (!rows.length) { box.innerHTML = '<p class="muted">Nothing here.</p>'; return; }
-      box.innerHTML = '<table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Line items</th><th>Team / owner</th><th>Last update</th></tr>' +
+      box.innerHTML = '<table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Line items</th><th>Initiate by</th><th>Team / owner</th><th>Last update</th></tr>' +
         rows.map(function (r) {
+          var due = r.initiateBy ? '<span class="' + (r.daysLeft <= 1 ? 'days-red' : '') + '">' + esc(portalDate(r.initiateBy)) + '</span><div class="muted">' +
+            esc(r.daysLeft <= 0 ? 'passed' : r.daysLeft + ' business day' + (r.daysLeft === 1 ? '' : 's') + ' left') + '</div>' : '';
           return '<tr class="click" data-id="' + esc(r.id) + '"><td><b>' + esc(r.id) + '</b></td><td>' + badge(r.status) +
             (r.returnReason ? '<div class="muted" style="margin-top:4px">' + esc(r.returnReason) + '</div>' : '') + '</td><td>' + esc(r.plan) +
-            '</td><td>' + esc(r.lines) + '</td><td>' + esc([r.team, r.owner].filter(String).join(' / ')) + '</td><td>' + esc(r.updatedAt) + '<div class="muted">' + esc(r.updatedBy) + '</div></td></tr>';
+            '</td><td>' + esc(r.lines) + '</td><td>' + due + '</td><td>' + esc([r.team, r.owner].filter(String).join(' / ')) + '</td><td>' + esc(r.updatedAt) + '<div class="muted">' + esc(r.updatedBy) + '</div></td></tr>';
         }).join('') + '</table>';
       box.querySelectorAll('tr[data-id]').forEach(function (tr) {
         tr.addEventListener('click', function () { open(tr.getAttribute('data-id')); });
@@ -542,16 +914,37 @@
       return renderFinal();
     }
 
+    // The billing entity picker on page 1 fills Tax ID, NPI and I'm a(n) right away; it is the same field as Name on page 3.
+    function entityPicker() {
+      var f = null;
+      S.boot.schema.pages[2].sections.forEach(function (s) { s.fields.forEach(function (x) { if (x.key === 'prov_name') f = x; }); });
+      return f ? Object.assign({}, f, { label: 'Billing entity (fills Tax ID, NPI and the provider details)', width: '' }) : null;
+    }
+
     function renderHeaderPage(page) {
       var inner = '';
+      var fields = pageFields(page);
+      var internal = [];
+      if (page.id === 'q1') {
+        internal = S.boot.schema.internal.slice();
+        var picker = entityPicker();
+        if (picker) internal.push(picker);
+        fields = internal.concat(fields);
+      }
+      applyDefaults(fields, S.d);
       if (page.id === 'q1') {
         inner += '<div class="internal-box"><div class="lbl">Internal (not on the portal)</div><div class="fields">' +
-          renderField({ key: 'Team', label: 'Team', type: 'text', width: 'half' }, S.d) +
-          renderField({ key: 'Owner', label: 'Owner (account owner)', type: 'text', width: 'half' }, S.d) + '</div></div>';
+          internal.map(function (f) { return renderField(f, S.d); }).join('') + '</div></div>';
       }
       page.sections.forEach(function (sec) {
-        if (sec.title) inner += '<h3>' + esc(sec.title) + '</h3>';
-        inner += '<div class="fields">' + sec.fields.map(function (f) { return renderField(f, S.d); }).join('') + '</div>';
+        var body = '<div class="fields">' + sec.fields.map(function (f) { return renderField(f, S.d); }).join('') + '</div>';
+        if (sec.collapsible) {
+          var has = sec.fields.some(function (f) { return !isEmpty(S.d[f.key]); });
+          inner += '<div class="poc' + (has ? '' : ' collapsed') + '"><h3>' + esc(sec.title) + ' <button class="link poc-toggle">+ Add point of contact</button></h3>' + body + '</div>';
+        } else {
+          if (sec.title) inner += '<h3>' + esc(sec.title) + '</h3>';
+          inner += body;
+        }
       });
       inner += '<div class="actions"><button class="ghost" id="exit2">Exit</button><div class="right">' +
         (S.page > 0 ? '<button class="secondary" id="back">Back</button>' : '') +
@@ -559,9 +952,11 @@
       app.innerHTML = editorShell(inner, page.step, page.title);
       wireShell();
 
-      var fields = pageFields(page);
-      if (page.id === 'q1') fields = [{ key: 'Team', type: 'text' }, { key: 'Owner', type: 'text' }].concat(fields);
       var card = app.querySelector('.card');
+      wireForm(card, fields, S.d);
+      card.querySelectorAll('.poc-toggle').forEach(function (b) {
+        b.addEventListener('click', function (e) { e.preventDefault(); b.closest('.poc').classList.remove('collapsed'); });
+      });
       app.querySelector('#exit2').addEventListener('click', function () { S.view = 'list'; render(); });
       if (app.querySelector('#back')) app.querySelector('#back').addEventListener('click', function () { S.page--; render(); });
       wireUploads(card, function () { return ''; }, null);
@@ -569,19 +964,42 @@
 
       app.querySelector('#cont').addEventListener('click', function () {
         if (!editable()) { S.page++; render(); return; }
-        var values = readFields(card, fields);
+        var values = Object.assign({}, S.pending, readFields(card, fields));
         var rec = Object.assign({}, S.d, values);
         var bad = showErrors(card, fields, rec);
         var missingFile = fields.some(function (f) { return f.type === 'file' && f.required && !filesFor(f.category).length; });
         if (bad) { toast('Fix the highlighted fields to continue.', true); return; }
+        if (pendingSuggestion(card)) return;
         if (missingFile) { toast('Upload the required document before continuing.', true); return; }
         busy(true);
         call('saveDispute', { id: S.id, values: values, page: page.id }).then(function (r) {
           S.id = r.id;
+          S.pending = {};
+          learnLocal(fields, values);
           apply(r.bundle);
           busy(false); S.page++; render();
         }).catch(fail);
       });
+    }
+
+    function lineSchemaFields() { return pageFields(S.boot.schema.line); }
+
+    // A new line starts with the claim number, date, item type, place of service and location of the
+    // previous line (one claim per dispute is the usual case), then the defaults.
+    function newLine(from) {
+      var prev = from || S.lines[S.lines.length - 1];
+      var rec = {};
+      var fields = lineSchemaFields();
+      if (prev) fields.forEach(function (f) { if (f.carry && !isEmpty(prev[f.key])) rec[f.key] = prev[f.key]; });
+      fields.forEach(function (f) { delete S.defaulted[f.key]; });
+      applyDefaults(fields, rec);
+      return rec;
+    }
+
+    function duplicateOf(src) {
+      var rec = {};
+      lineSchemaFields().forEach(function (f) { if (f.type !== 'file' && !isEmpty(src[f.key])) rec[f.key] = src[f.key]; });
+      return rec;
     }
 
     function renderLines() {
@@ -590,9 +1008,11 @@
       if (S.line === null) {
         inner += '<div class="lines-mini">' + (S.lines.length ? S.lines.map(function (l) {
           return '<div><span><b>Line ' + esc(l.LineNo) + '</b> · ' + esc(l.claim_number) + ' · ' + esc(portalDate(l.service_date)) + ' · ' + esc(moneyShown(l.qpa)) + ' · ' + esc(l.service_code) + '</span>' +
-            '<button class="link" data-edit-line="' + esc(l.LineNo) + '">Edit</button></div>';
+            '<span class="row-actions">' + (editable() && S.lines.length < 50 ? '<button class="link" data-dup-line="' + esc(l.LineNo) + '">Duplicate</button>' : '') +
+            '<button class="link" data-edit-line="' + esc(l.LineNo) + '">Edit</button></span></div>';
         }).join('') : '<span class="muted">No line items yet.</span>') + '</div>';
         if (S.lines.length >= 50) inner += '<div class="warn">This dispute has 50 line items, the maximum for one batched dispute.</div>';
+        inner += warnBox(S.warnings);
         inner += '<div class="actions"><button class="ghost" id="exit2">Exit</button><div class="right"><button class="secondary" id="back">Back</button>' +
           (editable() && S.lines.length < 50 ? '<button class="secondary" id="add">+ Add line item</button>' : '') +
           '<button class="primary" id="next"' + (S.lines.length ? '' : ' disabled') + '>Continue to summary</button></div></div>';
@@ -600,32 +1020,51 @@
         wireShell();
         app.querySelector('#exit2').addEventListener('click', function () { S.view = 'list'; render(); });
         app.querySelector('#back').addEventListener('click', function () { S.page = 2; render(); });
-        if (app.querySelector('#add')) app.querySelector('#add').addEventListener('click', function () { S.line = {}; render(); });
+        if (app.querySelector('#add')) app.querySelector('#add').addEventListener('click', function () { S.line = newLine(); render(); });
         app.querySelector('#next').addEventListener('click', function () { S.page = 4; render(); });
+        var byNo = function (b, attr) {
+          var n = Number(b.getAttribute(attr));
+          return S.lines.filter(function (l) { return Number(l.LineNo) === n; })[0];
+        };
         app.querySelectorAll('[data-edit-line]').forEach(function (b) {
-          b.addEventListener('click', function () {
-            var n = Number(b.getAttribute('data-edit-line'));
-            S.line = Object.assign({}, S.lines.filter(function (l) { return Number(l.LineNo) === n; })[0]);
-            render();
-          });
+          b.addEventListener('click', function () { S.line = Object.assign({}, byNo(b, 'data-edit-line')); render(); });
+        });
+        app.querySelectorAll('[data-dup-line]').forEach(function (b) {
+          b.addEventListener('click', function () { S.line = duplicateOf(byNo(b, 'data-dup-line')); render(); toast('Copy of line ' + b.getAttribute('data-dup-line') + ': change what differs, then save.'); });
         });
         return;
       }
 
       var rec = S.line;
       var lineNo = rec.LineNo || '';
+      var fields = pageFields(sc);
       inner += '<div class="mirror" style="color:var(--text-2)">' + (lineNo ? 'Editing line ' + esc(lineNo) : 'New line ' + (S.lines.length + 1)) + ' of the batch</div>';
       sc.sections.forEach(function (sec) {
         inner += '<h3>' + esc(sec.title) + '</h3><div class="fields">' + sec.fields.map(function (f) { return renderField(f, rec, lineNo); }).join('') + '</div>';
+        if (sec.fields.some(function (f) { return f.key === 'initial_payment'; })) inner += '<div class="warn hidden" id="amount-warn"></div>';
       });
       inner += '<div class="warn">For open negotiation start dates on or after November 1, 2026, a batch can have at most 50 line items.</div>';
       inner += '<div class="actions"><div class="right"><button class="ghost" id="cancel">Cancel</button>' +
-        (lineNo && editable() ? '<button class="danger" id="del">Delete line</button>' : '') + '</div><div class="right">' +
+        (lineNo && editable() ? '<button class="danger" id="del">Delete line</button>' : '') +
+        (editable() && S.lines.length < 50 ? '<button class="secondary" id="dup">Duplicate line</button>' : '') + '</div><div class="right">' +
         (editable() ? '<button class="secondary" id="save">Save</button><button class="primary" id="saveadd">Save & Add Another</button>' : '') + '</div></div>';
       app.innerHTML = editorShell(inner, sc.step, sc.title);
       wireShell();
       var card = app.querySelector('.card');
-      var fields = pageFields(sc);
+      wireForm(card, fields, rec);
+      wireAmounts(card);
+
+      // "Uses line N's documentation" when another line has the same claim number.
+      var claimInput = card.querySelector('.f[data-key="claim_number"] input');
+      card.updateClaimDocs = function () {
+        var box = card.querySelector('[data-claim-docs]');
+        if (!box) return;
+        var shared = filesFor('qpa', S.line && S.line.LineNo).length ? [] : sameClaimDocs(claimInput.value, S.line && S.line.LineNo);
+        box.textContent = shared.length ? 'Uses the QPA documentation already uploaded for this claim number: ' +
+          shared.map(function (x) { return x.Name; }).join(', ') + '. It is linked to this line when you save.' : '';
+      };
+      claimInput.addEventListener('input', card.updateClaimDocs);
+      card.updateClaimDocs();
 
       // Files picked on a new line are uploaded once the line is saved.
       wireUploads(card, function () { return S.line && S.line.LineNo; }, function () {
@@ -639,14 +1078,65 @@
         busy(true);
         call('deleteLine', S.id, lineNo).then(function (b) { apply(b); busy(false); S.line = null; render(); }).catch(fail);
       });
+      if (app.querySelector('#dup')) app.querySelector('#dup').addEventListener('click', function () {
+        S.line = duplicateOf(Object.assign({}, S.line, readFields(card, fields)));
+        render();
+        toast('Copy of this line: change what differs, then save.');
+      });
       if (app.querySelector('#save')) {
         app.querySelector('#save').addEventListener('click', function () {
-          saveLine(card, fields, false).then(function (n) { if (n) { S.line = null; S.page = 4; render(); } }).catch(function () {});
+          saveLine(card, fields, false).then(function (n) { if (n) { S.line = null; S.page = 4; render(); if (!lineWarnings(n)) toast('Line ' + n + ' saved'); } }).catch(function () {});
         });
         app.querySelector('#saveadd').addEventListener('click', function () {
-          saveLine(card, fields, false).then(function (n) { if (n) { S.line = {}; render(); toast('Line ' + n + ' saved'); } }).catch(function () {});
+          saveLine(card, fields, false).then(function (n) {
+            if (!n) return;
+            var saved = S.lines.filter(function (l) { return Number(l.LineNo) === Number(n); })[0];
+            S.line = newLine(saved);
+            render();
+            if (!lineWarnings(n)) toast('Line ' + n + ' saved');
+          }).catch(function () {});
         });
       }
+    }
+
+    // Initial payment is usually QPA minus cost sharing: it is suggested while the field is empty or still holds the suggestion.
+    function wireAmounts(card) {
+      var get = function (k) { var b = card.querySelector('.f[data-key="' + k + '"] input'); return b; };
+      var qpa = get('qpa'), cost = get('cost_sharing'), init = get('initial_payment');
+      if (!qpa || !cost || !init) return;
+      var isAmt = function (v) { return /^\d+(\.\d{1,2})?$/.test(String(v).trim()); };
+      var cents = function (v) { return Math.round(Number(v) * 100); };
+      var upd = function () {
+        var q = qpa.value.trim(), c = cost.value.trim();
+        if (isAmt(q) && isAmt(c) && cents(c) <= cents(q) && (init.value.trim() === '' || init.getAttribute('data-suggested') === init.value)) {
+          init.value = ((cents(q) - cents(c)) / 100).toFixed(2);
+          init.setAttribute('data-suggested', init.value);
+          var lbl = init.parentNode.querySelector('label');
+          if (lbl && !lbl.querySelector('[data-sugg]')) lbl.insertAdjacentHTML('beforeend', '<span class="chip" data-sugg title="QPA minus cost sharing">suggested</span>');
+        }
+        var i = init.value.trim(), msg = '';
+        if (isAmt(q) && isAmt(c) && cents(c) > cents(q)) msg = 'Cost sharing is more than the QPA. Check both amounts.';
+        else if (isAmt(q) && isAmt(c) && isAmt(i) && cents(c) + cents(i) !== cents(q)) msg = 'Cost sharing plus initial payment (' + moneyShown((cents(c) + cents(i)) / 100) + ') does not equal the QPA (' + moneyShown(q) + '). This does not block saving.';
+        var w = card.querySelector('#amount-warn');
+        w.textContent = msg;
+        w.classList.toggle('hidden', !msg);
+      };
+      [qpa, cost].forEach(function (el) { el.addEventListener('input', upd); });
+      init.addEventListener('input', function () {
+        var s = init.parentNode.querySelector('[data-sugg]');
+        if (s && init.value !== init.getAttribute('data-suggested')) s.parentNode.removeChild(s);
+        upd();
+      });
+      upd();
+    }
+
+    // Shows the server's warnings about a saved line (duplicate claim, amounts). Returns true when something was shown.
+    function lineWarnings(n) {
+      var line = S.lines.filter(function (l) { return Number(l.LineNo) === Number(n); })[0] || {};
+      var claim = String(line.claim_number || '');
+      var mine = S.warnings.filter(function (w) { return w.indexOf('Line ' + n + ':') === 0 || (claim && w.indexOf('Claim ' + claim + ' ') === 0); });
+      if (mine.length) toast('Line ' + n + ' saved. ' + mine.join(' '), 'warn');
+      return mine.length > 0;
     }
 
     // Saves the open line form. With skipFileCheck, it saves without requiring QPA documents (used before an upload).
@@ -654,13 +1144,16 @@
       var values = readFields(card, fields);
       var rec = Object.assign({}, S.line, values);
       if (showErrors(card, fields, rec)) { toast('Fix the highlighted fields to save the line.', true); return Promise.reject(new Error('Fix the highlighted fields first.')); }
-      if (!skipFileCheck && !(S.line.LineNo && filesFor('qpa', S.line.LineNo).length)) {
+      if (pendingSuggestion(card)) return Promise.reject(new Error('Check the suggested spelling first.'));
+      var hasDocs = (S.line.LineNo && filesFor('qpa', S.line.LineNo).length) || sameClaimDocs(values.claim_number, S.line.LineNo).length;
+      if (!skipFileCheck && !hasDocs) {
         toast('Upload the claim and QPA documentation for this line.', true);
         return Promise.resolve(null);
       }
       busy(true);
       return call('saveLine', S.id, S.line.LineNo || null, values).then(function (r) {
         S.line = Object.assign({}, rec, { LineNo: r.lineNo });
+        learnLocal(fields, values);
         apply(r.bundle);
         busy(false);
         return r.lineNo;
@@ -669,6 +1162,7 @@
 
     function renderFinal() {
       var fin = S.boot.schema.final;
+      applyDefaults(fin.fields, S.d);
       var inner = '<p class="sub">Review summary of qualified items and/or services. Select Edit if you need to change an item or service.</p>' +
         '<h3>Summary of Qualified Items and/or Services</h3>' +
         '<div style="overflow-x:auto"><table class="grid"><tr><th>#</th>' + fin.columns.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '<th></th></tr>' +
@@ -679,17 +1173,22 @@
           }).join('') + '<td>' + (editable() ? '<button class="link" data-edit-line="' + esc(l.LineNo) + '">Edit</button>' : '') + '</td></tr>';
         }).join('') + '</table></div>' +
         (editable() && S.lines.length < 50 ? '<p><button class="secondary" id="addmore">Add Another Item</button></p>' : '') +
-        '<h3></h3><div class="fields">' + renderField(fin.additional, S.d) + '</div>' +
+        '<h3></h3><div class="fields">' + renderField(fin.additional, S.d) + fin.fields.map(function (f) { return renderField(f, S.d); }).join('') + '</div>' +
+        '<div class="sig"><b>Signature:</b> ' + (S.d.prov_name ? esc(S.d.prov_name) : '<span class="muted">the provider or facility name (page 3)</span>') +
+        ' <span class="muted">· Date: the day the US desk submits in the portal</span></div>' +
+        (S.deadline ? deadlineText(S.d.on_start_date) : '') +
+        warnBox(S.warnings) +
         '<div id="result"></div>' +
         '<div class="actions"><button class="ghost" id="exit2">Exit</button><div class="right"><button class="secondary" id="back">Back</button>' +
         (editable() ? '<button class="primary" id="finalize">Save & create confirmation PDF</button>' : '') + '</div></div>';
       app.innerHTML = editorShell(inner, fin.step, fin.title);
       wireShell();
       var card = app.querySelector('.card');
+      wireForm(card, fin.fields, S.d);
       wireUploads(card, function () { return ''; }, null);
       app.querySelector('#exit2').addEventListener('click', function () { S.view = 'list'; render(); });
       app.querySelector('#back').addEventListener('click', function () { S.page = 3; render(); });
-      if (app.querySelector('#addmore')) app.querySelector('#addmore').addEventListener('click', function () { S.page = 3; S.line = {}; render(); });
+      if (app.querySelector('#addmore')) app.querySelector('#addmore').addEventListener('click', function () { S.page = 3; S.line = newLine(); render(); });
       app.querySelectorAll('[data-edit-line]').forEach(function (b) {
         b.addEventListener('click', function () {
           var n = Number(b.getAttribute('data-edit-line'));
@@ -699,8 +1198,15 @@
         });
       });
       if (app.querySelector('#finalize')) app.querySelector('#finalize').addEventListener('click', function () {
+        var values = readFields(card, fin.fields);
+        if (showErrors(card, fin.fields, Object.assign({}, S.d, values))) { toast('Fix the highlighted fields first.', true); return; }
+        if (pendingSuggestion(card)) return;
         busy(true);
-        call('finalizeDispute', S.id).then(function (r) {
+        call('saveDispute', { id: S.id, values: values, page: 'final' }).then(function (r) {
+          learnLocal(fin.fields, values);
+          apply(r.bundle);
+          return call('finalizeDispute', S.id);
+        }).then(function (r) {
           busy(false);
           var box = app.querySelector('#result');
           if (!r.ok) {
@@ -784,11 +1290,15 @@
 
     function renderDesk() {
       var sc = S.boot.schema;
+      var dl = S.deadline;
       var h = '<div class="desk-head"><div><button class="link" id="exit">← All disputes</button><h1>' + esc(S.id) + ' ' + badge(S.d.Status) + '</h1>' +
-        '<p class="sub">Copy each value into the portal in this order. Pages match the portal\'s screens.</p></div>' +
+        '<p class="sub">Copy each value into the portal in this order. Pages match the portal\'s screens.</p>' +
+        (dl && S.d.Status !== 'Filed' ? '<p class="' + (dl.daysLeft <= 1 ? 'days-red' : '') + '" style="margin:0">Initiate by ' + esc(portalDate(dl.initiateBy)) +
+          (dl.daysLeft <= 0 ? ' (passed)' : ' (' + dl.daysLeft + ' business day' + (dl.daysLeft === 1 ? '' : 's') + ' left)') + '</p>' : '') + '</div>' +
         '<div class="progress"><b id="prog-text"></b><div class="bar"><i id="prog-bar"></i></div>' +
         '<p style="margin:8px 0 0"><a target="_blank" rel="noopener" href="' + esc(S.d.FolderUrl) + '">Open dispute folder</a>' +
         (S.d.ConfirmationPdfUrl ? ' · <a target="_blank" rel="noopener" href="' + esc(S.d.ConfirmationPdfUrl) + '">Prepared summary PDF</a>' : '') + '</p></div></div>';
+      h += warnBox(S.warnings, 'Noted by the app (not blocking):');
 
       sc.pages.forEach(function (p) {
         h += '<div class="card page-card"><div class="mirror">Portal page: ' + esc(p.step) + '</div>';
@@ -819,14 +1329,19 @@
         '<div class="crow"><div class="l">Additional Supporting Documentation</div><div class="v">' +
         (extra.length ? extra.map(function (x) { return '<a href="' + esc(x.Url) + '" target="_blank" rel="noopener">' + esc(x.Name) + '</a>'; }).join('<br>') : '<span class="muted">None</span>') +
         '</div><span class="muted" style="font-size:12px">Upload in portal</span></div>' +
-        '<p class="muted">Check the portal summary against ' + esc(S.lines.length) + ' line item(s), then Sign & Submit in the portal yourself.</p></div>';
+        deskFields(S.d, sc.final.fields, 'h.', '') +
+        copyRow('h.signature', 'Signature:', S.d.prov_name || '', 'copy') +
+        '<p class="muted">Check the portal summary against ' + esc(S.lines.length) + ' line item(s), then Sign & Submit in the portal yourself. The signature date is the day you submit.</p></div>';
 
       if (S.d.Status !== 'Filed') {
         h += '<div class="card"><div class="finish"><div><b>Filed in the portal</b>' +
-          '<input type="text" id="portal-no" placeholder="Dispute number from the portal">' +
-          '<div class="lbl" style="font-size:13px;font-weight:600">Portal confirmation PDF (optional)</div><input type="file" id="portal-pdf" accept="application/pdf" style="margin:6px 0 12px">' +
+          '<input type="text" id="portal-no" placeholder="Portal dispute number, like DISP-1234567" autocomplete="off">' +
+          '<div class="lbl" style="font-size:13px;font-weight:600"><span class="req">*</span> Portal confirmation PDF</div><input type="file" id="portal-pdf" accept="application/pdf" style="margin:6px 0 12px">' +
           '<div><button class="success" id="filed">Mark as filed</button></div></div>' +
-          '<div><b>Something is wrong</b><textarea id="reason" rows="3" placeholder="What needs fixing in Lebanon"></textarea>' +
+          '<div><b>Something is wrong</b>' +
+          '<input type="text" id="reason" list="dl_return" placeholder="Reason" autocomplete="off"><datalist id="dl_return">' +
+          entries('ReturnReason').map(function (o) { return '<option value="' + esc(o.v) + '"></option>'; }).join('') + '</datalist>' +
+          '<textarea id="details" rows="3" placeholder="What needs fixing in Lebanon"></textarea>' +
           '<button class="danger" id="return">Return to Lebanon</button></div></div></div>';
       } else {
         h += '<div class="okbox">Filed by ' + esc(S.d.FiledBy) + ' on ' + esc(S.d.FiledAt) + '. Portal dispute number: <b>' + esc(S.d.PortalDisputeNumber) + '</b>' +
@@ -854,19 +1369,22 @@
 
       if (app.querySelector('#filed')) {
         app.querySelector('#filed').addEventListener('click', function () {
-          var no = app.querySelector('#portal-no').value.trim();
-          if (!no) { toast('Enter the dispute number from the portal.', true); return; }
+          var no = app.querySelector('#portal-no').value.trim().toUpperCase();
+          if (!/^DISP-\d{7}$/.test(no)) { toast('Enter the portal dispute number, like DISP-1234567.', true); return; }
           var f = app.querySelector('#portal-pdf').files[0];
+          if (!f) { toast('Attach the portal confirmation PDF.', true); return; }
           busy(true);
-          (f ? readAsBase64(f).then(function (b) { return { name: f.name, mimeType: f.type, data: b }; }) : Promise.resolve(null))
-            .then(function (pdf) { return call('markFiled', S.id, no, pdf); })
+          readAsBase64(f).then(function (b) { return call('markFiled', S.id, no, { name: f.name, mimeType: f.type, data: b }); })
             .then(function (b) { apply(b); busy(false); toast('Marked as filed'); renderDesk(); }).catch(fail);
         });
         app.querySelector('#return').addEventListener('click', function () {
           var reason = app.querySelector('#reason').value.trim();
-          if (!reason) { toast('Say what needs fixing.', true); return; }
+          var details = app.querySelector('#details').value.trim();
+          if (!reason) { toast('Pick a reason for returning the dispute.', true); return; }
+          var s = closestOption(S.boot.options.ReturnReason || [], reason);
+          if (s && confirm('Did you mean "' + s + '"? OK uses "' + s + '", Cancel keeps "' + reason + '".')) reason = s;
           busy(true);
-          call('returnDispute', S.id, reason).then(function () { S.lists = {}; busy(false); toast('Returned to Lebanon'); S.view = 'list'; S.filter = 'Ready for US desk'; render(); }).catch(fail);
+          call('returnDispute', S.id, reason, details).then(function () { S.lists = {}; busy(false); toast('Returned to Lebanon'); S.view = 'list'; S.filter = 'Ready for US desk'; render(); }).catch(fail);
         });
       }
     }
@@ -879,6 +1397,107 @@
       bar.style.width = (c.all ? Math.round(c.done / c.all * 100) : 0) + '%';
     }
 
+    // ---------------------------------------------------------------- Insights (trends during training)
+
+    function shareBar(pct) { return '<div class="share" title="' + pct + '%"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></div>'; }
+
+    function renderInsights() {
+      app.innerHTML = '<div class="list-head"><div><button class="link" id="exit">← All disputes</button><h1>Insights</h1>' +
+        '<p class="sub">What the app has learned from saved disputes: the values used most, the defaults it now suggests, and what was added this week.</p></div></div>' +
+        '<div id="ins"><p class="muted">Loading…</p></div>';
+      app.querySelector('#exit').addEventListener('click', function () { S.view = 'list'; render(); });
+      call('getInsights').then(function (r) {
+        if (S.view !== 'insights') return;
+        var st = r.settings;
+        var h = '<div class="card"><b>Learning mode: ' + esc(st.LearningMode) + '</b> · ' +
+          esc(st.LearningMode === 'On' ? 'training phase: new values are used at once.' : 'new values wait for an admin in Lists.') +
+          ' · ' + esc(r.addedThisWeek) + ' new value(s) this week · defaults need ' + Math.round(st.DefaultShare * 100) + '% of the last ' + esc(st.DefaultWindow) + ' saves.</div>';
+        h += '<div class="card" style="margin-top:16px"><h2>Defaults now suggested</h2><div style="overflow-x:auto"><table class="grid"><tr><th>Field</th><th>Default</th><th>From</th><th>Share of recent saves</th><th>Saves looked at</th></tr>' +
+          r.defaults.map(function (d) {
+            return '<tr><td>' + esc(d.label) + '</td><td>' + (d.value === '' ? '<span class="muted">(blank)</span>' : esc(d.value)) + '</td><td>' +
+              (d.source === 'learned' ? '<span class="chip learned">learned</span>' : '<span class="chip">seed</span>') + '</td><td>' +
+              shareBar(Math.round(d.share * 100)) + ' <span class="muted">' + Math.round(d.share * 100) + '%</span></td><td>' + esc(d.sample) + '</td></tr>';
+          }).join('') + '</table></div></div>';
+        h += '<div class="ins-grid">' + r.lists.map(function (l) {
+          return '<div class="card"><h2>' + esc(l.list) + '</h2><p class="muted" style="margin:0 0 8px">' + esc(l.values) + ' value(s) · ' + esc(l.total) + ' use(s) · ' +
+            esc(l.addedThisWeek) + ' new this week' + (l.pending ? ' · <b>' + esc(l.pending) + ' waiting for an admin</b>' : '') + '</p>' +
+            (l.top.length ? '<table class="grid"><tr><th>Value</th><th>Uses</th><th>Share</th></tr>' + l.top.map(function (t) {
+              return '<tr><td>' + esc(t.value) + (t.label ? '<div class="muted">' + esc(t.label) + '</div>' : '') + '</td><td>' + esc(t.count) + '</td><td>' + shareBar(t.share) + ' <span class="muted">' + esc(t.share) + '%</span></td></tr>';
+            }).join('') + '</table>' : '<p class="muted">Nothing yet.</p>') + '</div>';
+        }).join('') + '</div>';
+        app.querySelector('#ins').innerHTML = h;
+      }).catch(fail);
+    }
+
+    // ---------------------------------------------------------------- Lists (admins)
+
+    function renderAdmin() {
+      app.innerHTML = '<div class="list-head"><div><button class="link" id="exit">← All disputes</button><h1>Lists</h1>' +
+        '<p class="sub">Rename, merge, hide or reactivate list values. Hidden values are never suggested. Merging moves the uses into the other value.</p></div></div>' +
+        '<div id="adm"><p class="muted">Loading…</p></div>';
+      app.querySelector('#exit').addEventListener('click', function () {
+        // Pick up the changes in the entry screens.
+        call('getBootstrap', false).then(function (b) { setBoot(Object.assign({}, b, { list: null })); }).catch(function () {});
+        S.view = 'list'; render();
+      });
+      call('adminListOptions', S.admin.list || '').then(showAdmin).catch(fail);
+    }
+
+    function showAdmin(r) {
+      S.admin.data = r;
+      var box = app.querySelector('#adm');
+      if (!box || S.view !== 'admin') return;
+      var h = '<div class="admin-layout"><div class="admin-lists">' + r.lists.map(function (l) {
+        return '<button data-list="' + esc(l.list) + '" class="' + (l.list === S.admin.list ? 'on' : '') + '">' + esc(l.list) +
+          ' <span class="muted">(' + esc(l.active) + (l.hidden ? ' + ' + esc(l.hidden) + ' hidden' : '') + ')</span></button>';
+      }).join('') + '</div><div>';
+      if (!r.rows) {
+        h += '<div class="card">Pick a list. Learning mode is <b>' + esc(r.learningMode) + '</b>' +
+          (r.learningMode === 'Off' ? ': new values typed by users wait here as Hidden until you activate them.' : ': new values are active at once (training phase).') +
+          ' Change it in the Settings tab.</div>';
+      } else {
+        var active = r.rows.filter(function (x) { return x.status !== 'Hidden'; }).map(function (x) { return x.value; });
+        h += '<datalist id="dl_admin">' + active.map(function (v) { return '<option value="' + esc(v) + '"></option>'; }).join('') + '</datalist>' +
+          '<div style="overflow-x:auto"><table class="grid"><tr><th>Value</th><th>Label</th><th>Uses</th><th>Last used</th><th>Source</th><th>Status</th><th>Actions</th></tr>' +
+          r.rows.map(function (x, i) {
+            return '<tr class="' + (x.status === 'Hidden' ? 'hidden-row' : '') + '" data-i="' + i + '"><td><b>' + esc(x.value) + '</b>' +
+              (x.similar ? '<div class="muted">Looks like: ' + esc(x.similar) + '</div>' : '') +
+              (x.mergedInto ? '<div class="muted">Merged into: ' + esc(x.mergedInto) + '</div>' : '') + '</td>' +
+              '<td><input type="text" data-label value="' + esc(x.label) + '"></td><td>' + esc(x.count) + '</td><td>' + esc(x.lastUsed) + '</td><td>' + esc(x.source) +
+              '<div class="muted">' + esc(x.addedBy) + '</div></td><td>' + esc(x.status) + '</td>' +
+              '<td><div class="row-actions"><button class="secondary" data-act="label">Save label</button>' +
+              '<button class="ghost" data-act="status">' + (x.status === 'Hidden' ? 'Activate' : 'Hide') + '</button>' +
+              '<input type="text" data-merge list="dl_admin" placeholder="Merge into…" value="' + esc(x.similar) + '" style="max-width:160px">' +
+              '<button class="ghost" data-act="merge">Merge</button></div></td></tr>';
+          }).join('') + '</table></div>';
+      }
+      box.innerHTML = h + '</div></div>';
+      box.querySelectorAll('[data-list]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          S.admin.list = b.getAttribute('data-list');
+          busy(true);
+          call('adminListOptions', S.admin.list).then(function (d) { busy(false); showAdmin(d); }).catch(fail);
+        });
+      });
+      box.querySelectorAll('[data-act]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tr = b.closest('tr');
+          var x = r.rows[Number(tr.getAttribute('data-i'))];
+          var act = b.getAttribute('data-act');
+          var change = {};
+          if (act === 'label') change.label = tr.querySelector('[data-label]').value.trim();
+          if (act === 'status') change.status = x.status === 'Hidden' ? 'Active' : 'Hidden';
+          if (act === 'merge') {
+            change.mergeInto = tr.querySelector('[data-merge]').value.trim();
+            if (!change.mergeInto) { toast('Type the value to merge into.', true); return; }
+            if (!confirm('Merge "' + x.value + '" into "' + change.mergeInto + '"? Its ' + x.count + ' use(s) move there and it is hidden.')) return;
+          }
+          busy(true);
+          call('adminUpdateOption', S.admin.list, x.value, change).then(function (d) { busy(false); toast('Saved'); showAdmin(d); }).catch(fail);
+        });
+      });
+    }
+
     // ---------------------------------------------------------------- start
 
     function showError(message) {
@@ -887,10 +1506,19 @@
       loader.firstChild.textContent = 'Something went wrong loading this page: ' + message;
     }
 
+    function setBoot(boot) {
+      boot.lists = boot.lists || {};
+      boot.options = {};
+      Object.keys(boot.lists).forEach(function (k) { boot.options[k] = boot.lists[k].map(function (o) { return o.v; }); });
+      S.boot = boot;
+      S.hol = null;
+    }
+
     // The first screen's data is built into the page; the server call is only a fallback.
     (BOOT && !BOOT.error ? Promise.resolve(BOOT) : call('getBootstrap', true)).then(function (boot) {
-      S.boot = boot;
-      document.getElementById('who').innerHTML = esc(boot.user) + (boot.isUsDesk ? '<span class="desk-pill">US desk</span>' : '');
+      setBoot(boot);
+      document.getElementById('who').innerHTML = esc(boot.user) + (boot.isUsDesk ? '<span class="desk-pill">US desk</span>' : '') +
+        (boot.isAdmin ? '<span class="desk-pill">Admin</span>' : '');
       if (boot.isUsDesk) S.filter = 'Ready for US desk';
       if (boot.list && boot.listFilter === S.filter) S.lists[S.filter] = { rows: boot.list, at: Date.now() };
       render();
