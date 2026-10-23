@@ -1,9 +1,13 @@
 /**
  * IDR Initiation Prep Studio (internal).
  *
- * Lebanon prepares each Notice of IDR Initiation here, on screens that mirror the
- * federal IDR portal page by page. The US desk then copies every field into the portal.
- * Nothing in this app connects to, or sends anything to, the CMS portal.
+ * Lebanon prepares each Notice of IDR Initiation here, on 7 pages that follow the federal
+ * IDR Gateway web form page by page (IDR Gateway Notice of IDR Initiation User Guide,
+ * version 15.0, October 14, 2026). The US desk then copies every field into the portal,
+ * top to bottom. Nothing in this app connects to, or sends anything to, the CMS portal.
+ *
+ * We always initiate, as a health care provider or a health care facility, and the
+ * location of service is always Texas. Plan-side and air ambulance paths are not built.
  *
  * The app learns as it is used: every list (payers, billing entities, IDR entities,
  * service codes, teams...) lives in the Options tab, grows when people save new values,
@@ -29,87 +33,134 @@ const ACTIVE = 'Active';
 const HIDDEN = 'Hidden';
 
 // Settings tab (Key | Value | Note). These apply when a key is missing.
-const SETTING_DEFAULTS = { LearningMode: 'On', DefaultWindow: 50, DefaultShare: 0.8 };
+// ComplexStates: states on CMS's Complex State list (comma list). Empty until the business confirms it.
+const SETTING_DEFAULTS = { LearningMode: 'On', DefaultWindow: 50, DefaultShare: 0.8, ComplexStates: '' };
 const MIN_DEFAULT_SAMPLE = 5; // a learned default needs at least this many saved records
 
 // Lists the app learns from saves, shown in Insights and the Lists admin view.
 const LEARNED_LISTS = ['Payer', 'BillingEntity', 'HealthPlanType', 'IdrEntity', 'ServiceCode', 'Modifier', 'PosCode',
   'Team', 'Owner', 'ReturnReason'];
-// These keep the order of the Options tab; every other list is ranked by use.
-const FIXED_ORDER_LISTS = ['State', 'Holiday', 'UsDeskUser', 'Admin'];
+// These keep the order of the Options tab (portal order); every other list is ranked by use.
+const FIXED_ORDER_LISTS = ['State', 'Holiday', 'UsDeskUser', 'Admin', 'HealthPlanType', 'PlanRole', 'ActingAs', 'ExtensionReason',
+  'DisputeType'];
 // Never sent to the browser.
 const PRIVATE_LISTS = ['UsDeskUser', 'Admin'];
 
+// IDR Gateway transition (user guide v15.0): from Nov 13, 2026 the web form is inside the
+// Gateway (sign-in); the form without sign-in is not available after Jan 15, 2027.
+const GATEWAY = { transition: '2026-11-13', noSignInEnds: '2027-01-15' };
+
 // ------------------------------------------------------------------ portal schema
-// Labels and order follow the portal's saved pages and the Notices of IDR Initiation.
+// Labels and order follow the IDR Gateway web form (user guide v15.0).
 // Change a label here and the entry screens, the copy desk and the PDF follow.
 //
 // Field options used below:
 //   type 'combo'  free typing with suggestions from an Options list (options = list name)
+//   type 'check'  one tick box; the stored value is Yes when ticked
+//   type 'fixed'  always value (shown as a locked chip, still copied to the portal)
 //   default       seeded default; '@top' means the most used value of the list. The app
 //                 replaces it with a learned default when one value dominates recent saves.
 //   learnEmpty    a blank answer counts as a value when learning the default
 //   fill          picking a value of this profile list fills these fields (data key -> field key or keys)
+//   auto          'entity': filled from the billing entity; 'planType': derived from the health plan type
 //   stop          answering stop.value makes the dispute ineligible (blocks Ready)
+//   showIf        the field shows (and is checked) only when the condition holds (see condMet_)
+//   requiredIf    required when the condition holds; requiredUnless: required when that other field is empty
 //   pattern       regular expression the value must match (patternMsg is the message)
+//   chars         'name' or 'address': the portal's allowed characters (see badChars_)
 //   digits        spaces and hyphens are removed before saving (Tax ID, NPI)
+//   upper         stored in capitals
 //   carry         a new line item starts with the previous line's value
-//   multi         several values separated by commas (modifiers)
+//   multi         several values, stored "; "-separated as the portal shows them (modifiers)
+//   strict        only values of the list are accepted (nothing new is learned); countUse: counts still feed the default
+//   before        (dates) must be before this dispute field
 
 const YES_NO = ['Yes', 'No'];
-const ACTING_AS = ['Group Health Plan', 'Individual health insurance issuer', 'Federal Employees Health Benefits (FEHB) carrier',
-  'Health care provider', 'Health care facility', 'Provider of air ambulance services'];
-const PLAN_ROLE = ['Group Health Plan', 'Individual health insurance issuer', 'Federal Employees Health Benefits (FEHB) carrier'];
-const DESIGNATION = ['Health care provider', 'Health care facility', 'Provider of air ambulance services'];
+const ACTING_AS = ['Health care provider', 'Health care facility'];
+const PLAN_TYPES = ['Individual health insurance issuer', 'Fully-insured ERISA group health plan',
+  'Federal Employees Health Benefits (FEHB) carrier', 'Either partially or fully self-insured ERISA group health plan',
+  'Church plan', 'Non-federal governmental plan (e.g., state or local government plan)', 'No Plan/Issuer Response'];
+const PLAN_TYPE_DEFAULT = PLAN_TYPES[3];
+const PLAN_TYPE_FEHB = PLAN_TYPES[2];
+const PLAN_ROLE = ['Group health plan', 'Individual health insurance issuer', 'Federal Employee Health Benefits (FEHB) carrier'];
+const DISPUTE_TYPES = ['A single dispute', 'A batched dispute'];
+const DISPUTE_TYPE_NOTES = {
+  'A single dispute': 'I’m disputing either (a) one service code that represents one item or service, or (b) one service code that represents multiple items or services (a bundled payment arrangement).',
+  'A batched dispute': 'I’m disputing multiple items or services related to the treatment of a similar condition.'
+};
+// The dispute kind the line rules follow (the portal's names for the three line-item layouts).
+const KIND = { single: 'Single Line Item – Not Bundled', bundled: 'Single Line Item – Bundled', batched: 'Batched Items or Services' };
+const LINE_TYPE = { bundled: 'Bundled Item or Service', component: 'Component Item or Service' };
+const EXT_APPROVAL = 'I received an extension approval from the Federal IDR mailbox and will upload evidence of this extension in the Supporting Documentation section of this web form.';
+const EXT_COOLING = 'The item(s) or service(s) under dispute was subject to the cooling off period.';
+const EXT_REASONS = [EXT_APPROVAL, EXT_COOLING];
+// Air ambulance never applies to us, so it is not offered.
 const ITEM_TYPES = ['Emergency item(s)/service(s)', 'Post-stabilization service(s)', 'Professional service(s)',
   'Hospital-based service(s)', 'Item(s)/service(s) furnished by a nonparticipating provider at a participating health care facility',
-  'Out-of-network air ambulance service(s)', 'Other: Provide description'];
-const DISPUTE_KINDS = ['Single dispute', 'A batched dispute', 'A bundled dispute'];
-const PLAN_TYPE_DEFAULT = 'Either partially or fully self-insured ERISA group health plan';
+  'Other: Provide description'];
+const NIP_METHODS = ['Email', 'Mail', 'Fax', 'Portal'];
+const IDRE_STATUS = ['Pending', 'Accepted preferred', 'Alternate accepted', 'Alternate denied'];
+const LOCATION = 'TX';
 const NOT_ELIGIBLE = 'Not eligible for federal IDR';
+const MAX_LINES = 50;
+const BATCH_CAP_FROM = '2026-11-01'; // batched disputes with open negotiation starting on or after this date: at most 50 lines
+const FILE_LIMIT = 45 * 1024 * 1024; // per file (Apps Script)
+const DISPUTE_FILE_LIMIT = 500 * 1024 * 1024; // portal: the whole dispute
+// Files the US desk uploads to the portal (they count toward the 500 MB).
+const PORTAL_FILE_CATEGORIES = ['on_evidence', 'extension', 'cooling', 'qpa', 'additional'];
 
-const PAYER_FILL = { role: 'plan_role', addr1: 'plan_addr1', addr2: 'plan_addr2', city: 'plan_city', state: 'plan_state',
+const MSG = {
+  prior2022: NOT_ELIGIBLE + ': items or services provided before January 1, 2022 are not eligible for the Federal IDR process',
+  consent: NOT_ELIGIBLE + ': surprise billing protections were waived for these items or services',
+  onEarly: 'If the parties can’t agree on an out-of-network rate, the 30-business-day open negotiation period must elapse before starting the Federal IDR process.',
+  batchMin: 'Batched items or services require two or more line items.',
+  batchMax: 'Batched items or services cannot exceed 50 dispute line items. If you have additional items or services to report, you must create an additional dispute.',
+  fileLimit: 'The file you are attempting to upload exceeds the 500MB file size limit for the entire dispute and cannot be uploaded. Reduce the file size and try attaching the document again.',
+  coverage: 'Not eligible if the member is only enrolled in coverage such as Medicare, Medicaid, CHIP, TRICARE or a health care sharing ministry.'
+};
+
+const PAYER_FILL = { addr1: 'plan_addr1', addr2: 'plan_addr2', city: 'plan_city', state: 'plan_state',
   zip: 'plan_zip', email: 'plan_email', phone: 'plan_phone', fax: 'plan_fax' };
-const ENTITY_FILL = { acting_as: ['q_acting_as', 'prov_designation'], tin: 'tin', npi: 'npi', group_name: 'prov_group_name',
+const ENTITY_FILL = { acting_as: 'q_acting_as', tin: 'tin', npi: 'npi', group_name: 'prov_group_name',
   addr1: 'prov_addr1', addr2: 'prov_addr2', city: 'prov_city', state: 'prov_state', zip: 'prov_zip',
   email: 'prov_email', phone: 'prov_phone', fax: 'prov_fax' };
 const CODE_FILL = { description: 'description' };
 
-function contactFields_(prefix, required) {
+const LATE = { key: 'on_start_date', late: true }; // more than 34 business days since open negotiation started
+
+// Main contact block, in the portal's order: email, phone, fax, mailing address, city, state, ZIP.
+function mainContact_(prefix, stateDefault) {
+  const state = { key: prefix + 'state', label: 'State:', type: 'select', options: 'State', required: true, width: 'third' };
+  if (stateDefault) state.default = stateDefault;
   return [
-    { key: prefix + 'name', label: 'Name:', type: 'text', required: false, skipForMain: true },
-    { key: prefix + 'addr1', label: 'Mailing Address:', type: 'text', required: required, placeholder: 'Street Address' },
-    { key: prefix + 'addr2', label: 'Mailing Address Line 2:', type: 'text', placeholder: 'Apartment, suite, unit, building, floor etc.' },
-    { key: prefix + 'city', label: 'City:', type: 'text', required: required, placeholder: 'City Name', width: 'third' },
-    { key: prefix + 'state', label: 'State:', type: 'select', options: 'State', required: required, width: 'third' },
-    { key: prefix + 'zip', label: 'Zip Code:', type: 'zip', required: required, placeholder: '#####-####', width: 'third' },
-    { key: prefix + 'email', label: 'Email:', type: 'email', required: required, width: 'half' },
-    { key: prefix + 'phone', label: 'Phone:', type: 'phone', required: required, placeholder: '(###) ###-####', width: 'half' }
+    { key: prefix + 'email', label: 'Email:', type: 'email', required: true, width: 'third' },
+    { key: prefix + 'phone', label: 'Phone:', type: 'phone', required: true, placeholder: '(###) ###-####', width: 'third' },
+    { key: prefix + 'fax', label: 'Fax:', type: 'phone', placeholder: '(###) ###-####', width: 'third' },
+    { key: prefix + 'addr1', label: 'Mailing Address:', type: 'text', required: true, chars: 'address', placeholder: 'Street Address' },
+    { key: prefix + 'addr2', label: 'Mailing Address Line 2:', type: 'text', chars: 'address', placeholder: 'Apartment, suite, unit, building, floor etc.' },
+    { key: prefix + 'city', label: 'City:', type: 'text', required: true, chars: 'address', placeholder: 'City Name', width: 'third' },
+    state,
+    { key: prefix + 'zip', label: 'ZIP Code:', type: 'zip', required: true, placeholder: '#####-####', width: 'third' }
   ];
 }
 
-// Points of contact were empty on every notice seen, so they start collapsed.
+// Points of contact start collapsed. Once a contact name is entered, the full contact incl. the mailing address is required.
 function pocSection_(prefix, title) {
-  return { title: title, collapsible: true, fields: contactFields_(prefix, false) };
-}
-
-function mainContact_(prefix) {
-  return contactFields_(prefix, true).filter(function (f) { return !f.skipForMain; })
-    .concat([{ key: prefix + 'fax', label: 'Fax:', type: 'phone', placeholder: '(###) ###-####', width: 'half' }]);
+  const named = { key: prefix + 'name', filled: true };
+  return { title: title, collapsible: true, fields: [
+    { key: prefix + 'name', label: title.indexOf('Primary') === 0 ? 'Primary Contact Name:' : 'Secondary Contact Name:', type: 'text', chars: 'name' },
+    { key: prefix + 'email', label: 'Email:', type: 'email', requiredIf: named, width: 'half' },
+    { key: prefix + 'phone', label: 'Phone:', type: 'phone', requiredIf: named, placeholder: '(###) ###-####', width: 'half' },
+    { key: prefix + 'addr1', label: 'Mailing Address:', type: 'text', requiredIf: named, chars: 'address', placeholder: 'Street Address' },
+    { key: prefix + 'addr2', label: 'Mailing Address Line 2:', type: 'text', chars: 'address' },
+    { key: prefix + 'city', label: 'City:', type: 'text', requiredIf: named, chars: 'address', width: 'third' },
+    { key: prefix + 'state', label: 'State:', type: 'select', options: 'State', requiredIf: named, width: 'third' },
+    { key: prefix + 'zip', label: 'ZIP Code:', type: 'zip', requiredIf: named, placeholder: '#####-####', width: 'third' }
+  ] };
 }
 
 function schema_() {
-  const planMain = [
-    { key: 'plan_role', label: "I'm a(n):", type: 'radio', options: PLAN_ROLE, required: true },
-    { key: 'plan_name', label: 'Health Insurance Plan or Company:', type: 'combo', options: 'Payer', required: true, fill: PAYER_FILL }
-  ].concat(mainContact_('plan_'));
-
-  const provMain = [
-    { key: 'prov_name', label: 'Name:', type: 'combo', options: 'BillingEntity', required: true, default: '', fill: ENTITY_FILL, width: 'half' },
-    { key: 'prov_group_name', label: 'Hospital, Facility or Group Name:', type: 'text', width: 'half' },
-    { key: 'prov_designation', label: 'Select one of the Health Care Designations:', type: 'radio', options: DESIGNATION, required: true }
-  ].concat(mainContact_('prov_'));
-
+  const cooling = { key: 'extension_reason', equals: EXT_COOLING };
   return {
     // Internal fields (not on the portal), shown on page 1.
     internal: [
@@ -118,95 +169,157 @@ function schema_() {
     ],
     pages: [
       {
-        id: 'q1', title: 'Qualification Questions', step: 'Qualification Questions · page 1',
+        id: 'qual', title: 'Introduction & Qualification Questions', step: 'Introduction & Qualification Questions · page 1', short: 'Qualification',
         sections: [{ title: '', fields: [
           { key: 'q_prior_2022', label: 'Was the service in question provided prior to 1/1/2022?', type: 'radio', options: YES_NO, required: true,
-            default: 'No', stop: { value: 'Yes', message: NOT_ELIGIBLE } },
-          { key: 'q_acting_as', label: 'I am (or I am acting on behalf of) a:', type: 'radio', options: ACTING_AS, required: true, default: '' },
-          { key: 'tin', label: 'Tax ID:', type: 'text', required: true, digits: true, pattern: '^\\d{9}$', patternMsg: 'must be 9 digits',
-            placeholder: '#########', width: 'half' },
-          { key: 'npi', label: 'National Provider Identifier (NPI):', type: 'text', required: true, digits: true, pattern: '^\\d{10}$',
+            default: 'No', stop: { value: 'Yes', message: MSG.prior2022 } },
+          { key: 'q_acting_as', label: 'I am (or I am acting on behalf of) a:', type: 'radio', options: ACTING_AS, required: true, auto: 'entity' },
+          { key: 'tin', label: 'Tax ID:', type: 'text', requiredUnless: 'npi', requiredMsg: 'is required when there is no NPI (enter at least one of the two)',
+            digits: true, pattern: '^\\d{9}$', patternMsg: 'must be 9 digits', placeholder: '#########', width: 'half' },
+          { key: 'npi', label: 'National Provider Identifier (NPI):', type: 'text', requiredUnless: 'tin',
+            requiredMsg: 'is required when there is no Tax ID (enter at least one of the two)', digits: true, pattern: '^\\d{10}$',
             patternMsg: 'must be 10 digits', placeholder: '##########', width: 'half' },
-          { key: 'q_plan_type', label: 'Health Plan Type:', type: 'combo', options: 'HealthPlanType', required: true, default: PLAN_TYPE_DEFAULT }
+          { key: 'q_plan_type', label: 'Health Plan Type:', type: 'select', options: 'HealthPlanType', strict: true, countUse: true, required: true,
+            default: PLAN_TYPE_DEFAULT, note: MSG.coverage },
+          { key: 'fehb_enrollment_code', label: 'Enrollment Code:', type: 'text', digits: true, pattern: '^\\d{3}$', patternMsg: 'must be 3 digits',
+            placeholder: '###', required: true, showIf: { key: 'q_plan_type', equals: PLAN_TYPE_FEHB }, width: 'third' },
+          { key: 'on_start_date', label: 'When did the open negotiation period start?', type: 'date', required: true, max: 'today', helper: 'deadline' },
+          { key: 'on_evidence', label: 'Upload evidence of the open negotiation period start date (for example, the notice or notices of open negotiation sent to the non-initiating party).',
+            type: 'file', category: 'on_evidence', required: true,
+            note: 'At least one file. In a batch with different open negotiation start dates, enter the first claim’s date above and upload a notice for each start date.' },
+          { key: 'extension_reason', label: 'Extension justification reason:', type: 'radio', options: EXT_REASONS, required: true, showIf: LATE },
+          { key: 'ext_approval', label: 'Upload a copy of the extension approval received from the Federal IDR Questions mailbox.', type: 'file',
+            category: 'extension', required: true, showIf: [LATE, { key: 'extension_reason', equals: EXT_APPROVAL }] },
+          { key: 'cooling_dispute_ref', label: 'Dispute Reference Number:', type: 'text', upper: true, required: true, showIf: [LATE, cooling],
+            requiredMsg: 'is required: enter the dispute reference number that triggered the cooling off period', pattern: '^DISP-\\d+$',
+            patternMsg: 'is not valid: use the DISP-XXXXXX format', placeholder: 'DISP-XXXXXX', width: 'half' },
+          { key: 'cooling_docs', label: 'Upload a copy of the payment determination(s) that initiated the cooling off period (all of them if cooling off periods overlap).',
+            type: 'file', category: 'cooling', required: true, showIf: [LATE, cooling] },
+          { key: 'consent_waiver', label: 'Did the health care provider or health care facility get consent from the participant, beneficiary, or enrollee to waive surprise billing protections for these items or services?',
+            type: 'radio', options: YES_NO, required: true, default: 'No', stop: { value: 'Yes', message: MSG.consent } }
         ] }]
       },
       {
-        id: 'q2', title: 'Qualification Questions', step: 'Qualification Questions · page 2',
+        id: 'dtype', title: 'Dispute Type', step: 'Dispute Type · page 2', short: 'Dispute type',
         sections: [{ title: '', fields: [
-          { key: 'on_start_date', label: 'Start Date of the Open Negotiation Period:', type: 'date', required: true, max: 'today', helper: 'deadline' },
-          { key: 'on_evidence', label: 'Upload evidence of the open negotiation period start date. For example, a copy of the notice or notices of open negotiation for the claim or claims in this dispute that was sent to the non-initiating party.', type: 'file', category: 'on_evidence', required: true },
-          { key: 'consent_waiver', label: 'Did the health care provider or health care facility get consent from the participant, beneficiary, or enrollee to waive surprise billing protections for these items or services?', type: 'radio', options: YES_NO, required: true,
-            default: 'No', stop: { value: 'Yes', message: NOT_ELIGIBLE } },
-          { key: 'dispute_kind', label: 'What are you disputing today?', type: 'radio', options: DISPUTE_KINDS, required: true, default: 'A batched dispute' }
+          { key: 'dispute_type', label: 'What are you disputing today?', type: 'radio', options: DISPUTE_TYPES, notes: DISPUTE_TYPE_NOTES, required: true,
+            default: DISPUTE_TYPES[1] },
+          { key: 'bundled_payment', label: 'Are you disputing a bundled payment arrangement (multiple items or services billed or reimbursed under one service code)?',
+            type: 'radio', options: YES_NO, required: true, showIf: { key: 'dispute_type', equals: DISPUTE_TYPES[0] } },
+          { key: 'batch_qualifies', label: 'I reviewed the batching questions and this dispute qualifies', type: 'check', required: true,
+            showIf: { key: 'dispute_type', equals: DISPUTE_TYPES[1] },
+            note: 'The portal asks "Do your disputes qualify for the batching process?" in a pop-up. Answer Yes there only when this is ticked.' }
         ] }]
       },
       {
-        id: 'parties', title: 'Notice of IDR Initiation', step: 'Notice of IDR Initiation · parties',
+        id: 'init', title: 'Initiating Party Contact Information', step: 'Contact Information · initiating party · page 3', short: 'Initiating party',
         sections: [
-          { title: 'Group Health Plan / Health Insurance Issuer / FEHB Carrier Information or TPA', fields: planMain },
-          pocSection_('plan_p1_', 'Primary point-of-contact if different from above:'),
-          pocSection_('plan_p2_', 'Secondary point-of-contact: (optional)'),
-          { title: 'Health Care Provider, Health Care Facility, or Provider of Air Ambulance Services Information or TPA', fields: provMain },
-          pocSection_('prov_p1_', 'Primary point-of-contact if different from above:'),
-          pocSection_('prov_p2_', 'Secondary point-of-contact: (optional)')
+          { title: 'Name and Address Information', fields: [
+            { key: 'prov_name', label: 'Health care provider name:', type: 'combo', options: 'BillingEntity', required: true, default: '', fill: ENTITY_FILL,
+              chars: 'name', width: 'half' },
+            { key: 'prov_group_name', label: 'Hospital, Health Care Facility or Group Name:', type: 'text', required: true, chars: 'name', width: 'half' }
+          ].concat(mainContact_('prov_', LOCATION)) },
+          pocSection_('prov_p1_', 'Primary point of contact if different from above:'),
+          pocSection_('prov_p2_', 'Secondary point of contact: (optional)')
+        ]
+      },
+      {
+        id: 'noninit', title: 'Non-Initiating Party Contact Information', step: 'Contact Information · non-initiating party · page 4', short: 'Non-initiating party',
+        sections: [
+          { title: 'Insurance provider type', fields: [
+            { key: 'plan_role', label: 'Select one of the insurance provider types below:', type: 'radio', options: PLAN_ROLE, required: true, auto: 'planType' }
+          ] },
+          { title: 'Name and Address Information', fields: [
+            { key: 'plan_name', label: 'Health Insurance Plan or Company:', type: 'combo', options: 'Payer', required: true, fill: PAYER_FILL, chars: 'name' }
+          ].concat(mainContact_('plan_')) },
+          pocSection_('plan_p1_', 'Primary point of contact if different from above:'),
+          pocSection_('plan_p2_', 'Secondary point of contact: (optional)')
         ]
       }
     ],
     line: {
-      title: 'Notice of IDR Initiation', step: 'Notice of IDR Initiation · line items',
+      id: 'lines', title: 'Dispute Line Items', step: 'Dispute Line Items · page 5', short: 'Line items',
       sections: [
-        { title: 'Line Item', fields: [
-          { key: 'claim_number', label: 'Claim Number:', type: 'text', required: true, width: 'half', carry: true },
-          { key: 'service_date', label: 'Date of the qualified IDR item or service:', type: 'date', required: true, min: '2022-01-01', width: 'half', carry: true }
-        ] },
-        { title: 'Payment Information', fields: [
+        { title: 'New Line Item', fields: [
           { key: 'description', label: 'Enter the description of the item or service.', type: 'textarea', required: true },
-          { key: 'qpa', label: 'Qualifying Payment Amount (QPA):', type: 'money', required: true, width: 'half' },
-          { key: 'qpa_docs', label: 'Upload documentation of the claim and QPA. Examples of acceptable documentation include the initial payment or notice of denial of payment, remittance form and explanation of benefits, explanation of payments.', type: 'file', category: 'qpa', required: true },
-          { key: 'cost_sharing', label: 'Cost sharing amount allowed:', type: 'money', required: true, width: 'half' },
-          { key: 'initial_payment', label: 'Initial payment amount for the item(s) and/or service(s) (if applicable):', type: 'money', width: 'half' }
+          { key: 'claim_number', label: 'Claim Number:', type: 'text', required: true, pattern: '^[A-Za-z0-9]{1,40}$',
+            patternMsg: 'must be up to 40 letters and digits (no spaces or symbols)', width: 'half', carry: true },
+          { key: 'service_date', label: 'Date of the qualified IDR item or service:', type: 'date', required: true, min: '2022-01-01',
+            before: 'on_start_date', width: 'half', carry: true },
+          { key: 'qpa', label: 'Qualifying Payment Amount (QPA):', type: 'money', required: true, width: 'third' },
+          { key: 'cost_sharing', label: 'Cost sharing amount allowed:', type: 'money', required: true, width: 'third' },
+          { key: 'initial_payment', label: 'Initial payment amount for the item(s) and/or service(s) (if applicable):', type: 'money', width: 'third' }
         ] },
-        { title: 'Type of Qualified Item(s) or Service(s)', fields: [
-          { key: 'item_types', label: 'Select the item(s) or service(s) under dispute and provide the service code.', type: 'checkboxes', options: ITEM_TYPES, required: true,
+        { title: 'Item(s) or service(s) under dispute', fields: [
+          { key: 'item_types', label: 'Select the item(s) or service(s) under dispute.', type: 'checkboxes', options: ITEM_TYPES, required: true,
             default: 'Emergency item(s)/service(s)', carry: true },
-          { key: 'other_desc', label: 'Other: Provide description', type: 'text', requiredIf: { key: 'item_types', includes: 'Other: Provide description' } },
-          { key: 'service_code', label: 'Service Code:', type: 'combo', options: 'ServiceCode', required: true, fill: CODE_FILL, width: 'quarter' },
-          { key: 'modifiers', label: 'Service Code Modifier(s):', type: 'combo', options: 'Modifier', multi: true, default: '', learnEmpty: true, width: 'quarter' },
-          { key: 'pos_code', label: 'Place of Service Code:', type: 'combo', options: 'PosCode', required: true, default: '23', carry: true, width: 'quarter' },
-          { key: 'location', label: 'Location of Service:', type: 'select', options: 'State', required: true, default: 'TX', carry: true, width: 'quarter' }
+          { key: 'other_desc', label: 'Other: Provide description', type: 'text', required: true,
+            showIf: { key: 'item_types', includes: 'Other: Provide description' } }
+        ] },
+        { title: 'Service codes', fields: [
+          { key: 'service_code', label: 'Service Code:', type: 'combo', options: 'ServiceCode', required: true, fill: CODE_FILL, upper: true,
+            pattern: '^[A-Za-z0-9]{5}$', patternMsg: 'must be exactly 5 letters or digits', width: 'quarter' },
+          { key: 'modifiers', label: 'Service Code Modifier(s):', type: 'combo', options: 'Modifier', multi: true, upper: true, default: '', learnEmpty: true,
+            itemPattern: '^[A-Za-z0-9]{2}$', maxItems: 4, itemMsg: 'must be up to 4 modifiers of 2 letters or digits each, like 25; 59', width: 'quarter' },
+          { key: 'pos_code', label: 'Place of Service Code:', type: 'combo', options: 'PosCode', required: true, default: '23', carry: true,
+            pattern: '^\\d{2}$', patternMsg: 'must be 2 digits', width: 'quarter' },
+          { key: 'location', label: 'Location of Service:', type: 'fixed', value: LOCATION, required: true, width: 'quarter' }
+        ] },
+        { title: 'Documentation', fields: [
+          { key: 'qpa_docs', label: 'Upload documentation of the claim and QPA (for example, the initial payment or notice of denial of payment, remittance form and explanation of benefits, explanation of payments).',
+            type: 'file', category: 'qpa', required: true },
+          { key: 'state_attest', label: 'I have reviewed the state-specific eligibility criteria regarding the IDR processes for this item or service, and attest that this item or service is eligible for the Federal IDR process.',
+            type: 'check', required: true, showIf: { key: 'location', inSetting: 'complexStates' } }
         ] }
-      ]
+      ],
+      // Copy desk order: the portal summary table's columns first.
+      deskOrder: ['description', 'claim_number', 'line_type', 'service_date', 'qpa', 'location', 'service_code', 'modifiers', 'pos_code',
+        'cost_sharing', 'initial_payment', 'item_types', 'other_desc', 'qpa_docs', 'state_attest']
     },
     final: {
-      title: 'Notice of IDR Initiation', step: 'Notice of IDR Initiation · summary',
+      id: 'final', title: 'Preferred Certified IDR Entity & Conflict of Interest', step: 'Preferred Certified IDR Entity & Conflict of Interest · page 6',
+      short: 'IDR entity',
+      sections: [
+        { title: 'Preferred Certified IDR Entity Selection', fields: [
+          { key: 'idr_entity', label: 'IDRE legal business name:', type: 'combo', options: 'IdrEntity', required: true, default: '@top' }
+        ] },
+        { title: 'Conflict of Interest Attestation', fields: [
+          { key: 'third_party_attest', label: 'Is the undersigned individual below a third-party administrator or other service provider initiating on behalf of the plan, issuer, carrier, or Health Care Provider/Health Care Facility/Provider of Air Ambulance Services?',
+            type: 'radio', options: YES_NO, required: true, default: 'No' },
+          { key: 'coi_attest', label: 'I (We), the undersigned initiating party (or representative of the initiating party), attest that to the best of my knowledge the preferred certified IDR entity does not have a disqualifying conflict of interest and that the item(s) and/or service(s) at issue are qualified IDR item(s) and/or service(s) within the scope of the Federal IDR process.',
+            type: 'check', required: true }
+        ] },
+        { title: 'Additional Supporting Documentation', fields: [
+          { key: 'additional_docs', label: 'Upload any additional supporting documentation that is relevant to the dispute.', type: 'file', category: 'additional' }
+        ] }
+      ],
+      // Filled by the portal; shown as locked chips.
+      auto: [{ label: 'Initiating party', from: 'prov_name' }, { label: 'Date', text: 'filled by the portal on the day the US desk submits' }],
+      // The portal's Summary of Qualified Items and/or Services table. kinds: only for those dispute kinds.
       columns: [
-        { key: 'description', label: 'Description of item(s) or service(s)' },
+        { key: 'description', label: 'Description of Item(s) or Service(s)' },
         { key: 'claim_number', label: 'Claim Number' },
-        { key: 'service_date', label: 'Date of item or service', type: 'date' },
+        { key: 'line_type', label: 'Line Item Type', kinds: [KIND.bundled] },
+        { key: 'service_date', label: 'Date of Item or Service', type: 'date' },
         { key: 'qpa', label: 'Qualifying Payment Amount (QPA)', type: 'money' },
-        { key: 'location', label: 'Location of service (include state)' },
+        { key: 'location', label: 'Location of Service (include state)' },
         { key: 'service_code', label: 'Service Code' },
         { key: 'modifiers', label: 'Service Code Modifier(s)' },
-        { key: 'pos_code', label: 'Place of service code(s)' }
-      ],
-      additional: { key: 'additional_docs', label: 'Additional Supporting Documentation', type: 'file', category: 'additional' },
-      // Saved on the dispute row, after the summary table (portal order).
-      fields: [
-        { key: 'idr_entity', label: 'Certified IDR entity legal business name:', type: 'combo', options: 'IdrEntity', required: true, default: '@top' },
-        { key: 'third_party_attest', label: 'Third Party Attestation:', type: 'radio', options: YES_NO, required: true, default: 'No' }
+        { key: 'pos_code', label: 'Place of Service Code(s)' }
       ]
-    }
+    },
+    review: { id: 'review', title: 'Review & Submit', step: 'Review & Submit · page 7', short: 'Review' }
   };
 }
 
-/** Every dispute-row field, in portal order: pages 1-3, then the final page. */
+/** Every dispute-row field, in portal order: pages 1-4, then page 6. */
 function headerFields_(s) {
   s = s || schema_();
   const out = [];
-  s.pages.forEach(function (p) {
+  s.pages.concat([s.final]).forEach(function (p) {
     p.sections.forEach(function (sec) { sec.fields.forEach(function (f) { out.push(f); }); });
   });
-  return out.concat(s.final.fields);
+  return out;
 }
 
 function lineFields_(s) {
@@ -224,9 +337,35 @@ function lineKeys_() {
   return lineFields_().filter(function (f) { return f.type !== 'file'; }).map(function (f) { return f.key; });
 }
 
+// dispute_kind is derived from the dispute type (page 2); the nip_ and idre_ columns are US desk tracking.
 const DISPUTE_META = ['DisputeID', 'Status', 'Team', 'Owner', 'CreatedBy', 'CreatedAt', 'UpdatedBy', 'UpdatedAt',
-  'FolderUrl', 'ConfirmationPdfUrl', 'ReadyAt', 'FiledBy', 'FiledAt', 'PortalDisputeNumber', 'PortalPdfUrl', 'ReturnReason'];
+  'FolderUrl', 'ConfirmationPdfUrl', 'ReadyAt', 'FiledBy', 'FiledAt', 'PortalDisputeNumber', 'PortalPdfUrl', 'ReturnReason',
+  'dispute_kind', 'nip_notified_date', 'nip_notified_method', 'idre_final', 'idre_status'];
 const LINE_META = ['DisputeID', 'LineNo'];
+const FILE_COLS = ['DisputeID', 'Category', 'LineNo', 'Name', 'Url', 'FileId', 'UploadedBy', 'UploadedAt', 'Size'];
+
+// ------------------------------------------------------------------ derived values
+
+/** The portal's line-item layout for a dispute type and the bundled answer. */
+function disputeKind_(type, bundled) {
+  if (type === DISPUTE_TYPES[1]) return KIND.batched;
+  if (type === DISPUTE_TYPES[0]) return bundled === 'Yes' ? KIND.bundled : KIND.single;
+  return '';
+}
+
+/** Non-initiating party type the portal expects for a health plan type. */
+function planRoleFor_(planType) {
+  if (!planType) return '';
+  if (planType === PLAN_TYPES[0]) return PLAN_ROLE[1];
+  if (planType === PLAN_TYPE_FEHB) return PLAN_ROLE[2];
+  return PLAN_ROLE[0];
+}
+
+/** Line 1 of a bundled dispute is the bundled item; later lines are components. Other kinds have no line type. */
+function lineTypeFor_(kind, index) {
+  if (kind !== KIND.bundled) return '';
+  return index === 0 ? LINE_TYPE.bundled : LINE_TYPE.component;
+}
 
 // ------------------------------------------------------------------ web app
 
@@ -257,8 +396,14 @@ function getBootstrap(withList) {
     aliases: aliases_(),
     defaults: suggestDefaults_(),
     learningMode: settings.LearningMode,
+    complexStates: settings.ComplexStates,
     today: todayStr_(),
-    status: STATUS
+    status: STATUS,
+    kinds: KIND,
+    gateway: GATEWAY,
+    rules: { maxLines: MAX_LINES, batchCapFrom: BATCH_CAP_FROM, fileLimit: FILE_LIMIT, disputeFileLimit: DISPUTE_FILE_LIMIT,
+      portalFileCategories: PORTAL_FILE_CATEGORIES, nipMethods: NIP_METHODS, idreStatus: IDRE_STATUS, extCooling: EXT_COOLING,
+      disputeTypes: DISPUTE_TYPES, planTypes: PLAN_TYPES, planRoles: PLAN_ROLE, lineType: LINE_TYPE, msg: MSG }
   };
   if (withList) {
     boot.listFilter = desk ? STATUS.ready : STATUS.draft;
@@ -278,10 +423,11 @@ function listDisputes(filter) {
     .map(function (r) {
       const dl = r.Status === STATUS.filed ? null : businessDeadline_(r.on_start_date);
       return {
-        id: r.DisputeID, status: r.Status, team: r.Team, owner: r.Owner, plan: r.plan_name,
+        id: r.DisputeID, status: r.Status, team: r.Team, owner: r.Owner, plan: r.plan_name, kind: r.dispute_kind,
         lines: count[r.DisputeID] || 0, updatedAt: r.UpdatedAt, updatedBy: r.UpdatedBy,
-        returnReason: r.ReturnReason, pdf: r.ConfirmationPdfUrl,
-        initiateBy: dl ? dl.initiateBy : '', daysLeft: dl ? dl.daysLeft : ''
+        returnReason: r.ReturnReason, pdf: r.ConfirmationPdfUrl, portalNumber: r.PortalDisputeNumber, idreStatus: r.idre_status,
+        initiateBy: dl ? dl.initiateBy : '', daysLeft: dl ? dl.daysLeft : '', band: dl ? dl.band : '',
+        opens: dl ? dl.opens : '', extension: !!r.extension_reason
       };
     })
     .reverse();
@@ -294,14 +440,20 @@ function getDispute(id) {
   const d = all.filter(function (r) { return r.DisputeID === id; })[0];
   if (!d) throw new Error('Dispute not found: ' + id);
   const allLines = rows_(t[1]);
-  const lines = allLines
-    .filter(function (l) { return l.DisputeID === id; })
-    .sort(function (a, b) { return Number(a.LineNo) - Number(b.LineNo); });
+  const lines = linesOf_(d, allLines);
   return { dispute: d, lines: lines, files: filesOf_(id), warnings: warnings_(d, lines, all, allLines),
     deadline: businessDeadline_(d.on_start_date) };
 }
 
-/** Creates or updates the dispute header (pages 1-3 and the final page fields). Returns { id, bundle }. */
+// The lines of a dispute in order, each with its derived line type (bundled disputes).
+function linesOf_(d, allLines) {
+  return allLines
+    .filter(function (l) { return l.DisputeID === d.DisputeID; })
+    .sort(function (a, b) { return Number(a.LineNo) - Number(b.LineNo); })
+    .map(function (l, i) { return Object.assign({}, l, { line_type: lineTypeFor_(d.dispute_kind, i) }); });
+}
+
+/** Creates or updates the dispute header (pages 1-4 and page 6). Returns { id, bundle }. */
 function saveDispute(payload) {
   const id = withLock_(function () {
     const user = currentUser_();
@@ -324,6 +476,13 @@ function saveDispute(payload) {
     fields.forEach(function (f) {
       if (f.type !== 'file' && Object.prototype.hasOwnProperty.call(values, f.key)) rec[f.key] = safe_(normValue_(f, values[f.key]));
     });
+    // The non-initiating party type follows the health plan type unless someone changed it by hand.
+    const has = function (k) { return Object.prototype.hasOwnProperty.call(values, k); };
+    if (has('q_plan_type') && !has('plan_role') && rec.q_plan_type !== old.q_plan_type &&
+        (!old.plan_role || old.plan_role === planRoleFor_(old.q_plan_type))) {
+      rec.plan_role = planRoleFor_(rec.q_plan_type);
+    }
+    rec.dispute_kind = disputeKind_(rec.dispute_type, rec.bundled_payment);
     rec.UpdatedBy = user;
     rec.UpdatedAt = now;
     if (rowNum === -1) appendRecords_(TABS.disputes, [rec]); else writeRecord_(TABS.disputes, rowNum, rec);
@@ -335,31 +494,81 @@ function saveDispute(payload) {
   return { id: id, bundle: getDispute(id) };
 }
 
-/** Adds or replaces a line item (page 4). Returns { lineNo, bundle }. */
+/** Adds or replaces a line item (page 5). Returns { lineNo, bundle }. */
 function saveLine(id, lineNo, values) {
   lineNo = withLock_(function () {
-    assertEditable_(id);
-    const fields = lineFields_();
-    const all = table_(TABS.lines).rows;
-    const existing = all.filter(function (r) { return r.DisputeID === id; });
-    if (!lineNo) {
-      if (existing.length >= 50) throw new Error('This dispute already has 50 line items, the maximum for one batched dispute.');
-      lineNo = existing.reduce(function (m, r) { return Math.max(m, Number(r.LineNo) || 0); }, 0) + 1;
-    }
-    const rec = { DisputeID: id, LineNo: Number(lineNo) };
-    fields.forEach(function (f) { if (f.type !== 'file') rec[f.key] = safe_(normValue_(f, values[f.key])); });
-    let rowNum = -1;
-    all.forEach(function (r, i) { if (r.DisputeID === id && Number(r.LineNo) === Number(lineNo)) rowNum = i + 2; });
-    const old = rowNum === -1 ? {} : Object.assign({}, all[rowNum - 2]);
-    if (rowNum === -1) appendRecords_(TABS.lines, [rec]); else writeRecord_(TABS.lines, rowNum, rec);
-    linkClaimDocs_(id, Number(lineNo), rec.claim_number, existing);
-    learnRecord_(fields, values, old, rec);
-    learnFlush_();
-    touch_(id);
-    log_(id, 'line:' + lineNo, 'saved');
-    return lineNo;
+    return storeLines_(id, [{ lineNo: lineNo, values: values }])[0];
   });
   return { lineNo: lineNo, bundle: getDispute(id) };
+}
+
+/**
+ * Adds several line items at once (bulk paste from a spreadsheet). rows: [{ field: value }].
+ * Every row is checked first; nothing is saved when one has a problem. Returns { lineNos, bundle }.
+ */
+function saveLines(id, rows) {
+  rows = rows || [];
+  if (!rows.length) throw new Error('Nothing to add.');
+  const lineNos = withLock_(function () {
+    const d = rowAt_(TABS.disputes, findRow_(TABS.disputes, 'DisputeID', id));
+    const ctx = ruleCtx_(d);
+    const problems = [];
+    rows.forEach(function (values, i) {
+      lineFields_().forEach(function (f) {
+        if (f.type === 'file') return;
+        const msg = checkField_(f, normValue_(f, values[f.key]), Object.assign({ location: LOCATION }, values), ctx);
+        if (msg) problems.push('Row ' + (i + 1) + ': ' + shortLabel_(f.label) + ' ' + msg);
+      });
+    });
+    if (problems.length) throw new Error(problems.slice(0, 10).join(' ') + (problems.length > 10 ? ' (and ' + (problems.length - 10) + ' more)' : ''));
+    return storeLines_(id, rows.map(function (v) { return { lineNo: null, values: v }; }));
+  });
+  return { lineNos: lineNos, bundle: getDispute(id) };
+}
+
+// Inside the lock: writes line items, links the claim's QPA documents and learns. Returns the line numbers.
+function storeLines_(id, items) {
+  const rowNum = findRow_(TABS.disputes, 'DisputeID', id);
+  if (rowNum === -1) throw new Error('Dispute not found: ' + id);
+  const d = rowAt_(TABS.disputes, rowNum);
+  if (d.Status === STATUS.filed) throw new Error('This dispute is already filed and can no longer be edited.');
+  const fields = lineFields_();
+  const all = table_(TABS.lines).rows;
+  let existing = all.filter(function (r) { return r.DisputeID === id; });
+  let next = existing.reduce(function (m, r) { return Math.max(m, Number(r.LineNo) || 0); }, 0) + 1;
+  const adds = [];
+  const dirty = {};
+  const out = [];
+  const olds = [];
+  items.forEach(function (it) {
+    let lineNo = it.lineNo;
+    if (!lineNo) {
+      const count = existing.length + adds.length;
+      if (count >= MAX_LINES) throw new Error('This dispute already has ' + MAX_LINES + ' line items, the maximum for one dispute.');
+      if (d.dispute_kind === KIND.single && count >= 1) {
+        throw new Error('A single dispute that is not bundled has exactly one line item. Change the dispute type on page 2 to add more.');
+      }
+      lineNo = next++;
+    }
+    const rec = { DisputeID: id, LineNo: Number(lineNo) };
+    fields.forEach(function (f) { if (f.type !== 'file') rec[f.key] = safe_(normValue_(f, (it.values || {})[f.key])); });
+    let found = -1;
+    all.forEach(function (r, i) { if (r.DisputeID === id && Number(r.LineNo) === Number(lineNo)) found = i + 2; });
+    olds.push(found === -1 ? {} : Object.assign({}, all[found - 2]));
+    if (found === -1) adds.push(rec); else dirty[found] = rec;
+    out.push({ lineNo: Number(lineNo), rec: rec, values: it.values || {} });
+  });
+  appendRecords_(TABS.lines, adds);
+  writeRows_(TABS.lines, table_(TABS.lines).header, dirty);
+  existing = existing.concat(adds);
+  out.forEach(function (o, i) {
+    linkClaimDocs_(id, o.lineNo, o.rec.claim_number, existing);
+    learnRecord_(fields, o.values, olds[i], o.rec);
+  });
+  learnFlush_();
+  touch_(id);
+  log_(id, out.length > 1 ? 'lines:' + out.length : 'line:' + out[0].lineNo, 'saved');
+  return out.map(function (o) { return o.lineNo; });
 }
 
 // One QPA document per claim: a line with no QPA documentation gets the files of another
@@ -392,6 +601,16 @@ function deleteLine(id, lineNo) {
   return getDispute(id);
 }
 
+/** Total size in bytes of the files the US desk uploads to the portal for a dispute (a shared file counts once). */
+function disputeFileBytes_(files) {
+  const seen = {};
+  return files.reduce(function (sum, f) {
+    if (PORTAL_FILE_CATEGORIES.indexOf(f.Category) === -1 || seen[f.FileId]) return sum;
+    seen[f.FileId] = true;
+    return sum + (Number(f.Size) || 0);
+  }, 0);
+}
+
 /**
  * Stores one uploaded file in the dispute's Drive folder. data is base64 without the data: prefix.
  * With sameClaim, a QPA document is also attached to every other line with the same claim number.
@@ -400,17 +619,20 @@ function deleteLine(id, lineNo) {
 function uploadFile(id, category, lineNo, name, mimeType, data, sameClaim) {
   if (!id) throw new Error('Save the page before uploading files.');
   const bytes = Utilities.base64Decode(data);
-  if (bytes.length > 45 * 1024 * 1024) throw new Error('Files must be under 45 MB each.');
+  if (bytes.length > FILE_LIMIT) throw new Error('Files must be under 45 MB each.');
+  if (PORTAL_FILE_CATEGORIES.indexOf(category) !== -1 && disputeFileBytes_(filesOf_(id)) + bytes.length > DISPUTE_FILE_LIMIT) {
+    throw new Error(MSG.fileLimit);
+  }
   const file = disputeFolder_(id).createFile(Utilities.newBlob(bytes, mimeType || 'application/octet-stream', name));
   return withLock_(function () {
-    const recs = [fileRecord_(id, category, lineNo, name, file)];
+    const recs = [fileRecord_(id, category, lineNo, name, file, bytes.length)];
     if (sameClaim && category === 'qpa' && lineNo) {
       const lines = rows_(table_(TABS.lines)).filter(function (l) { return l.DisputeID === id; });
       const mine = lines.filter(function (l) { return Number(l.LineNo) === Number(lineNo); })[0];
       const claim = mine ? String(mine.claim_number).trim() : '';
       lines.forEach(function (l) {
         if (claim && Number(l.LineNo) !== Number(lineNo) && String(l.claim_number).trim() === claim) {
-          recs.push(fileRecord_(id, category, l.LineNo, name, file));
+          recs.push(fileRecord_(id, category, l.LineNo, name, file, bytes.length));
         }
       });
     }
@@ -437,7 +659,7 @@ function removeFile(id, fileId, lineNo) {
   });
 }
 
-/** Checks the dispute, saves the summary page as a PDF in Drive and hands it to the US desk. */
+/** Checks the dispute, saves the summary as a PDF in Drive and hands it to the US desk. */
 function finalizeDispute(id) {
   const problems = validate_(id);
   if (problems.length) return { ok: false, problems: problems, warnings: getDispute(id).warnings };
@@ -452,16 +674,45 @@ function finalizeDispute(id) {
 
 // ------------------------------------------------------------------ US desk
 
-function markFiled(id, portalNumber, portalPdf) {
+/**
+ * portalNumber: the portal's dispute number (DISP-...). portalPdf: the Notice of IDR Initiation PDF
+ * ({ name, mimeType, data }). notice: { date: 'YYYY-MM-DD', method: Email | Mail | Fax | Portal }, when
+ * the non-initiating party was sent a copy of the notice (required the same day).
+ */
+function markFiled(id, portalNumber, portalPdf, notice) {
   requireUsDesk_();
   portalNumber = String(portalNumber || '').trim().toUpperCase();
-  if (!/^DISP-\d{7}$/.test(portalNumber)) throw new Error('Enter the dispute number the portal gave you, like DISP-1234567.');
-  if (!portalPdf || !portalPdf.data) throw new Error('Attach the portal confirmation PDF.');
+  if (!/^DISP-\d+$/.test(portalNumber)) throw new Error('Enter the dispute number the portal gave you, like DISP-1234567.');
+  if (!portalPdf || !portalPdf.data) throw new Error('Attach the Notice of IDR Initiation PDF (Save as PDF on the portal’s confirmation page).');
+  notice = notice || {};
+  const nDate = String(notice.date || '').trim();
+  const nMethod = String(notice.method || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nDate) || nDate > todayStr_()) {
+    throw new Error('Enter the date the non-initiating party was sent a copy of the Notice of IDR Initiation (not in the future).');
+  }
+  if (NIP_METHODS.indexOf(nMethod) === -1) throw new Error('Pick how the notice was sent: ' + NIP_METHODS.join(', ') + '.');
+  assertWindowOpen_(getDispute(id).dispute);
   const pdfUrl = uploadFile(id, 'portal_confirmation', '', portalPdf.name, portalPdf.mimeType, portalPdf.data).url;
   withLock_(function () {
     setCells_(id, { Status: STATUS.filed, FiledBy: currentUser_(), FiledAt: nowStr_(),
-      PortalDisputeNumber: safe_(portalNumber), PortalPdfUrl: pdfUrl });
-    log_(id, 'status', STATUS.filed + ' ' + portalNumber);
+      PortalDisputeNumber: safe_(portalNumber), PortalPdfUrl: pdfUrl, nip_notified_date: nDate, nip_notified_method: nMethod,
+      idre_status: IDRE_STATUS[0] });
+    log_(id, 'status', STATUS.filed + ' ' + portalNumber + '; notice sent ' + nDate + ' by ' + nMethod);
+  });
+  return getDispute(id);
+}
+
+/** After filing: the certified IDR entity finally selected and how the selection went. Optional tracking, never blocking. */
+function updateIdreSelection(id, idreFinal, idreStatus) {
+  requireUsDesk_();
+  idreStatus = String(idreStatus || '').trim();
+  if (IDRE_STATUS.indexOf(idreStatus) === -1) throw new Error('Pick a status: ' + IDRE_STATUS.join(', ') + '.');
+  withLock_(function () {
+    const rowNum = findRow_(TABS.disputes, 'DisputeID', id);
+    if (rowNum === -1) throw new Error('Dispute not found: ' + id);
+    if (rowAt_(TABS.disputes, rowNum).Status !== STATUS.filed) throw new Error('Only filed disputes have an IDR entity selection.');
+    setCells_(id, { idre_final: safe_(String(idreFinal || '').trim()), idre_status: idreStatus });
+    log_(id, 'idre', idreStatus + (idreFinal ? ': ' + idreFinal : ''));
   });
   return getDispute(id);
 }
@@ -521,6 +772,7 @@ function learn_(list, value, data, noCount) {
     const json = JSON.stringify(Object.assign({}, before, data));
     if (json !== JSON.stringify(before)) { rec.Data = json; changed = true; }
   }
+  if (list === 'ServiceCode' && !rec.Label && data && data.description) { rec.Label = data.description; changed = true; }
   if (changed && hit.rowNum) LEARN_.dirty[hit.rowNum] = rec;
   return rec.Value;
 }
@@ -540,15 +792,19 @@ function findOption_(list, value) {
   return fallback;
 }
 
-/** Learns the combo fields of a saved record. Count goes up only when the value is new on this record. */
+/** Learns the combo fields (and counted strict selects) of a saved record. Count goes up only when the value is new on this record. */
 function learnRecord_(fields, values, old, rec) {
   fields.forEach(function (f) {
-    if (f.type !== 'combo' || !f.options || !Object.prototype.hasOwnProperty.call(values, f.key)) return;
+    if (!(f.type === 'combo' || f.countUse) || !f.options || typeof f.options !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(values, f.key)) return;
     const now = String(rec[f.key] || '').trim();
     if (!now) return;
-    const data = f.fill ? profileData_(f.fill, rec) : null;
+    let data = f.fill ? profileData_(f.fill, rec) : null;
+    // A saved dispute confirms the billing entity's provider or facility answer.
+    if (data && f.options === 'BillingEntity' && data.acting_as) data.acting_as_confirmed = true;
     const before = (f.multi ? splitMulti_(old[f.key]) : [String(old[f.key] || '')]).map(optionKey_);
     (f.multi ? splitMulti_(now) : [now]).forEach(function (v) {
+      if (f.strict && !findOption_(f.options, v)) return; // strict lists never grow from typing
       const isNew = before.indexOf(optionKey_(v)) === -1;
       if (isNew || data) learn_(f.options, v, data, !isNew);
     });
@@ -578,6 +834,7 @@ function cleanData_(data) {
   if (!data) return null;
   const out = {};
   Object.keys(data).forEach(function (k) {
+    if (typeof data[k] === 'boolean') { out[k] = data[k]; return; }
     const v = String(data[k] == null ? '' : data[k]).trim();
     if (v) out[k] = v;
   });
@@ -609,7 +866,7 @@ function isPlaceholder_(v) {
 
 // ---- typo protection
 // Case, spaces and punctuation are ignored, so "SILVER ALLIANCE,LLC" and "Silver Alliance, L.L.C."
-// both match "SILVER ALLIANCE LLC". Values whose digits differ are never typos of each other
+// both match "Silver Alliance, LLC". Values whose digits differ are never typos of each other
 // (99284 and 99285, Team 1 and Team 11).
 
 function optionKey_(s) {
@@ -683,7 +940,10 @@ function suggestDefaults_() {
       let topN = 0;
       Object.keys(tally).forEach(function (v) { if (tally[v] > topN) { top = v; topN = tally[v]; } });
       const share = n ? Math.round(topN / n * 100) / 100 : 0;
-      const usable = n >= MIN_DEFAULT_SAMPLE && share >= st.DefaultShare && !(f.type === 'combo' && hidden[f.options + '|' + optionKey_(top)]);
+      const listed = typeof f.options === 'string' && f.options;
+      const allowed = !listed || !hidden[f.options + '|' + optionKey_(top)];
+      const inOptions = !Array.isArray(f.options) || f.options.indexOf(top) !== -1;
+      const usable = n >= MIN_DEFAULT_SAMPLE && share >= st.DefaultShare && allowed && inOptions;
       out[f.key] = usable ? { value: top, source: 'learned', share: share, sample: n } : { value: seed, source: 'seed', share: share, sample: n };
     });
   };
@@ -720,10 +980,22 @@ function getInsights() {
     };
   });
   const defaults = suggestDefaults_();
+  // Filed disputes whose non-initiating party did not get the notice on the filing day.
+  const filed = readTab_(TABS.disputes).filter(function (r) { return r.Status === STATUS.filed; });
+  const late = filed.filter(function (r) { return noticeLate_(r); }).map(function (r) {
+    return { id: r.DisputeID, filedOn: String(r.FiledAt).slice(0, 10), notified: r.nip_notified_date || '', method: r.nip_notified_method || '' };
+  });
   return {
     settings: st, addedThisWeek: addedThisWeek, lists: lists,
-    defaults: Object.keys(defaults).map(function (k) { return Object.assign({ key: k, label: labels[k] || k }, defaults[k]); })
+    defaults: Object.keys(defaults).map(function (k) { return Object.assign({ key: k, label: labels[k] || k }, defaults[k]); }),
+    notices: { filed: filed.length, notSameDay: late }
   };
+}
+
+// True when a filed dispute's notice to the non-initiating party was not sent on the filing day.
+function noticeLate_(d) {
+  if (d.Status !== STATUS.filed || !d.FiledAt) return false;
+  return String(d.nip_notified_date || '') !== String(d.FiledAt).slice(0, 10);
 }
 
 // ---- Lists admin (users in the Admin list)
@@ -760,6 +1032,12 @@ function adminListOptions(list) {
  */
 function adminUpdateOption(list, value, change) {
   requireAdmin_();
+  updateOption_(list, value, change);
+  return adminListOptions(list);
+}
+
+// The change itself, also used by setup() for the seeded aliases.
+function updateOption_(list, value, change) {
   change = change || {};
   withLock_(function () {
     const t = table_(TABS.options);
@@ -795,6 +1073,7 @@ function adminUpdateOption(list, value, change) {
         target.Count = (Number(target.Count) || 0) + (Number(rec.Count) || 0);
         if (String(rec.LastUsed) > String(target.LastUsed)) target.LastUsed = rec.LastUsed;
         const merged = Object.assign({}, srcData, cleanData_(parseData_(target.Data)) || {});
+        delete merged.mergedInto; // the target becomes a real value again
         target.Data = Object.keys(merged).length ? JSON.stringify(merged) : '';
         target.Status = ACTIVE;
         dirty[ti + 2] = target;
@@ -810,24 +1089,37 @@ function adminUpdateOption(list, value, change) {
   });
   clearOptionsCache_();
   CacheService.getScriptCache().remove('defaults');
-  return adminListOptions(list);
 }
 
 // ------------------------------------------------------------------ deadlines
-// Open negotiation lasts 30 business days, counted from the day after it starts. The dispute
-// must then be initiated within the next 4 business days. Weekends and the dates in the
-// Holiday list (federal holidays, as observed) are not business days.
+// The portal counts business days with the open negotiation start date itself as business day 1
+// (both ends count; a start date that is not a business day does not count). Real filings were
+// accepted on Oct 15, 2026 for a start of Sep 1, 2026 and on Oct 16 for Sep 2, which this count gives.
+// Open negotiation is business days 1 to 30; the initiation window is business days 31 to 34.
+// Weekends and the dates in the Holiday list (federal holidays, as observed) are not business days.
+//
+// b = business days from the open negotiation start date to today, both counted:
+//   b < 31   the open negotiation period has not elapsed (blocking)
+//   31 - 34  initiation window
+//   b > 34   an extension reason is required (approval from the Federal IDR mailbox, or cooling off period)
 
 const DAY_MS = 86400000;
+const WINDOW_FIRST = 31;
+const WINDOW_LAST = 34;
 let HOLIDAYS_ = null;
 
-/** Returns { onEnds, initiateBy, daysLeft } for an ISO start date, or null. daysLeft counts today; 0 or less means passed. */
+/**
+ * Returns { onEnds, opens, initiateBy, daysLeft, b, band } for an ISO start date, or null. onEnds is business day 30,
+ * opens day 31 (first day of the initiation window), initiateBy day 34 (last day). daysLeft counts today; 0 or less
+ * means passed. band: 'early' | 'window' | 'late'.
+ */
 function businessDeadline_(onStart, today) {
   const start = isoToUtc_(onStart);
   if (start === null) return null;
   const hol = holidays_();
-  const onEnds = addBusinessDays_(start, 30, hol);
-  const initiateBy = addBusinessDays_(onEnds, 4, hol);
+  const onEnds = nthBusinessDay_(start, 30, hol);
+  const opens = nthBusinessDay_(start, WINDOW_FIRST, hol);
+  const initiateBy = nthBusinessDay_(start, WINDOW_LAST, hol);
   const now = isoToUtc_(today || todayStr_());
   let daysLeft = 0;
   if (now <= initiateBy) {
@@ -835,7 +1127,27 @@ function businessDeadline_(onStart, today) {
   } else {
     for (let d = initiateBy + DAY_MS; d <= now && daysLeft > -400; d += DAY_MS) if (isBusinessDay_(d, hol)) daysLeft--;
   }
-  return { onEnds: utcToIso_(onEnds), initiateBy: utcToIso_(initiateBy), daysLeft: daysLeft };
+  const b = businessDaysBetween_(start - DAY_MS, now, hol); // both ends counted
+  const band = b < WINDOW_FIRST ? 'early' : b <= WINDOW_LAST ? 'window' : 'late';
+  return { onEnds: utcToIso_(onEnds), opens: utcToIso_(opens), initiateBy: utcToIso_(initiateBy), daysLeft: daysLeft, b: b, band: band };
+}
+
+/** The n-th business day counting from start (start is day 1 when it is a business day). */
+function nthBusinessDay_(start, n, hol) {
+  let d = start;
+  let count = isBusinessDay_(d, hol) ? 1 : 0;
+  while (count < n) {
+    d += DAY_MS;
+    if (isBusinessDay_(d, hol)) count++;
+  }
+  return d;
+}
+
+/** Business days d with from < d <= to (0 when to is not after from). */
+function businessDaysBetween_(from, to, hol) {
+  let n = 0;
+  for (let d = from + DAY_MS; d <= to; d += DAY_MS) if (isBusinessDay_(d, hol)) n++;
+  return n;
 }
 
 function addBusinessDays_(from, n, hol) {
@@ -881,53 +1193,207 @@ function todayStr_() {
 
 // ------------------------------------------------------------------ validation
 
+/** What the rules need besides the record itself: today, the Complex State list and the dispute (for line checks). */
+function ruleCtx_(dispute, today) {
+  return { today: today || todayStr_(), complexStates: getSettings_().ComplexStates, dispute: dispute || {} };
+}
+
+/**
+ * A field condition: { key, equals } | { key, includes } | { key, filled: true } | { key, late: true }
+ * (open negotiation started more than 34 business days ago) | { key, inSetting: 'complexStates' }.
+ * An array means all of them.
+ */
+function condMet_(c, rec, ctx) {
+  if (!c) return true;
+  if (Array.isArray(c)) return c.every(function (x) { return condMet_(x, rec, ctx); });
+  const v = String(rec[c.key] == null ? '' : rec[c.key]).trim();
+  if (c.late) { const dl = businessDeadline_(v, ctx && ctx.today); return !!dl && dl.band === 'late'; }
+  if (c.filled) return v !== '' && !isPlaceholder_(v);
+  if (c.equals != null) return v === c.equals;
+  if (c.includes != null) return v.indexOf(c.includes) !== -1;
+  if (c.inSetting) return ((ctx && ctx[c.inSetting]) || []).indexOf(v.toUpperCase()) !== -1;
+  return true;
+}
+
+function fieldShown_(f, rec, ctx) {
+  return !f.showIf || condMet_(f.showIf, rec, ctx);
+}
+
+function fieldRequired_(f, rec, ctx) {
+  if (!fieldShown_(f, rec, ctx)) return false;
+  if (f.required) return true;
+  if (f.requiredIf && condMet_(f.requiredIf, rec, ctx)) return true;
+  if (f.requiredUnless) {
+    const o = String(rec[f.requiredUnless] == null ? '' : rec[f.requiredUnless]).trim();
+    return !o || isPlaceholder_(o);
+  }
+  return false;
+}
+
+// The portal's allowed characters. Names: letters (accented too), digits, spaces and , - ’ ' . & ~.
+// Addresses and cities also allow # / \ :.
+const CHAR_HELP = {
+  name: 'letters, digits, spaces and , - ’ \' . & ~',
+  address: 'letters, digits, spaces and # , - ’ \' . & ~ / \\ :'
+};
+
+function charRe_(kind) {
+  const base = 'A-Za-z0-9\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F\\u0300-\\u036F\\u1E00-\\u1EFF ,\\-\\u2019\'.&~';
+  return new RegExp('[^' + base + (kind === 'address' ? '#/\\\\:' : '') + ']', 'g');
+}
+
+/** The characters of v the portal rejects for this kind of field, each once. */
+function badChars_(kind, v) {
+  const out = [];
+  (String(v == null ? '' : v).match(charRe_(kind)) || []).forEach(function (c) { if (out.indexOf(c) === -1) out.push(c); });
+  return out;
+}
+
+/** v without the rejected characters (what the Fix button gives). */
+function fixChars_(kind, v) {
+  return String(v == null ? '' : v).replace(charRe_(kind), '').replace(/\s+/g, ' ').trim();
+}
+
+/** Modifiers as the portal shows them: up to 4 two-character codes, "; "-separated. */
+function normModifiers_(v) {
+  return splitMulti_(v).map(function (m) { return m.toUpperCase(); }).join('; ');
+}
+
 function validate_(id) {
   const full = getDispute(id);
   const d = full.dispute;
   const s = schema_();
+  const ctx = ruleCtx_(d);
   const problems = [];
   const files = full.files;
   const hasFile = function (cat, line) {
     return files.some(function (f) { return f.Category === cat && (!line || Number(f.LineNo) === Number(line)); });
   };
 
-  const pages = s.pages.concat([{ step: s.final.step, sections: [{ fields: s.final.fields }] }]);
-  pages.forEach(function (p) {
+  s.pages.concat([s.final]).forEach(function (p) {
     p.sections.forEach(function (sec) {
       sec.fields.forEach(function (f) {
         if (f.type === 'file') {
-          if (f.required && !hasFile(f.category)) problems.push(p.step + ': ' + shortLabel_(f.label) + ' is missing');
+          if (fieldRequired_(f, d, ctx) && !hasFile(f.category)) problems.push(p.step + ': ' + shortLabel_(f.label) + ' is missing');
           return;
         }
-        const msg = checkField_(f, d[f.key], d);
+        const msg = checkField_(f, d[f.key], d, ctx);
         if (msg) problems.push(p.step + ': ' + shortLabel_(f.label) + ' ' + msg);
-        if (f.stop && String(d[f.key]) === f.stop.value) problems.push(f.stop.message + ': "' + shortLabel_(f.label) + '" is ' + f.stop.value + '.');
+        if (f.stop && String(d[f.key]) === f.stop.value) problems.push(f.stop.message + ' ("' + shortLabel_(f.label) + '" is ' + f.stop.value + ').');
       });
     });
   });
 
-  if (full.deadline && full.deadline.daysLeft <= 0) {
-    problems.push('Deadline passed: the dispute had to be initiated by ' + fmt_(full.deadline.initiateBy, 'date') + '.');
-  }
-
-  if (!full.lines.length) problems.push('Add at least one line item.');
-  if (full.lines.length > 50) problems.push('A batched dispute can have at most 50 line items.');
+  timingProblems_(d, ctx.today).forEach(function (p) { problems.push(p); });
+  lineRules_(d, full.lines).forEach(function (p) { problems.push(s.line.step + ': ' + p); });
   full.lines.forEach(function (l) {
     s.line.sections.forEach(function (sec) {
       sec.fields.forEach(function (f) {
         if (f.type === 'file') {
-          if (f.required && !hasFile('qpa', l.LineNo)) problems.push('Line ' + l.LineNo + ': QPA documentation is missing');
+          if (fieldRequired_(f, l, ctx) && !hasFile('qpa', l.LineNo)) problems.push('Line ' + l.LineNo + ': QPA documentation is missing');
           return;
         }
-        const msg = checkField_(f, l[f.key], l);
+        const msg = checkField_(f, l[f.key], l, ctx);
         if (msg) problems.push('Line ' + l.LineNo + ': ' + shortLabel_(f.label) + ' ' + msg);
       });
     });
   });
+  const t = readTables_([TABS.disputes, TABS.lines]);
+  duplicateLines_(d, full.lines, rows_(t[0]), rows_(t[1])).blocking.forEach(function (p) { problems.push(p); });
+  if (disputeFileBytes_(files) > DISPUTE_FILE_LIMIT) problems.push(MSG.fileLimit);
   return problems;
 }
 
-/** Checks that do not block Ready: amounts, dispute kind, claims already in other disputes, timing. */
+/**
+ * Open negotiation timing problems that block Ready. Before business day 31 Lebanon may prepare ahead: that is
+ * only a notice (see warnings_), and the US desk cannot file until the window opens (see assertWindowOpen_).
+ */
+function timingProblems_(d, today) {
+  const dl = businessDeadline_(d.on_start_date, today);
+  if (!dl) return [];
+  if (dl.band === 'late' && !String(d.extension_reason || '').trim()) {
+    return ['Deadline passed: the initiation window was ' + fmt_(dl.opens, 'date') + ' to ' + fmt_(dl.initiateBy, 'date') +
+      '. Pick an extension reason on page 1 if one applies.'];
+  }
+  return [];
+}
+
+/** True when the cooling off period exception applies (late, with the cooling off extension reason). */
+function coolingApplies_(d, today) {
+  return d.extension_reason === EXT_COOLING && condMet_(LATE, d, { today: today });
+}
+
+/** Line count and date-of-service rules of the dispute kind. Returns blocking problems. */
+function lineRules_(d, lines, today) {
+  const out = [];
+  const n = lines.length;
+  const kind = d.dispute_kind;
+  if (!n) out.push('Add at least one line item.');
+  if (kind === KIND.single && n > 1) out.push('A single dispute that is not bundled has exactly 1 line item (this one has ' + n + '). Change the dispute type on page 2, or delete lines.');
+  if (kind === KIND.batched && n === 1) out.push(MSG.batchMin);
+  if (n > MAX_LINES) out.push(kind === KIND.batched && String(d.on_start_date) >= BATCH_CAP_FROM ? MSG.batchMax : 'A dispute can have at most ' + MAX_LINES + ' line items.');
+  if (kind === KIND.batched && n > 1 && !coolingApplies_(d, today)) {
+    const spread = dosSpread_(lines);
+    if (spread && spread.days > 30) {
+      out.push('In a batched dispute, all dates of service must be within 30 business days of each other (unless a cooling off period applies). ' +
+        'Earliest ' + fmt_(spread.first, 'date') + ', latest ' + fmt_(spread.last, 'date') + ': ' + spread.days + ' business days apart.');
+    }
+  }
+  return out;
+}
+
+/** { first, last, days }: the earliest and latest date of service and the business days between them, or null. */
+function dosSpread_(lines) {
+  const dates = lines.map(function (l) { return String(l.service_date || ''); }).filter(function (v) { return isoToUtc_(v) !== null; }).sort();
+  if (dates.length < 2) return null;
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  return { first: first, last: last, days: businessDaysBetween_(isoToUtc_(first), isoToUtc_(last), holidays_()) };
+}
+
+// The portal's duplicate key: claim number, date of service, service code and modifier(s).
+function lineKey_(l) {
+  return [String(l.claim_number || '').trim().toUpperCase(), String(l.service_date || '').trim(),
+    String(l.service_code || '').trim().toUpperCase(), normModifiers_(l.modifiers)].join('|');
+}
+
+/**
+ * The portal refuses a line that repeats the claim number, date of service, service code and modifiers of a line in
+ * an earlier dispute (here: one that is Ready or Filed), unless this dispute has an extension, or of another line of
+ * the same dispute. Returns { blocking: [], notes: [] }; notes are repeats allowed because of the extension.
+ */
+function duplicateLines_(d, lines, allDisputes, allLines) {
+  const blocking = [];
+  const notes = [];
+  const seen = {};
+  lines.forEach(function (l) {
+    if (!String(l.claim_number || '').trim()) return;
+    const k = lineKey_(l);
+    if (seen[k]) blocking.push('Line ' + l.LineNo + ' repeats line ' + seen[k] + ' (same claim number, date of service, service code and modifiers).');
+    else seen[k] = l.LineNo;
+  });
+  const status = {};
+  allDisputes.forEach(function (r) { status[r.DisputeID] = r.Status; });
+  const hits = {};
+  allLines.forEach(function (o) {
+    const st = status[o.DisputeID];
+    if (o.DisputeID === d.DisputeID || (st !== STATUS.filed && st !== STATUS.ready)) return;
+    const n = seen[lineKey_(o)];
+    if (!n) return;
+    const label = o.DisputeID + ' (' + st + ')';
+    hits[n] = hits[n] || [];
+    if (hits[n].indexOf(label) === -1) hits[n].push(label);
+  });
+  const extension = !!String(d.extension_reason || '').trim();
+  Object.keys(hits).sort(function (a, b) { return a - b; }).forEach(function (n) {
+    const msg = 'Line ' + n + ' has the same claim number, date of service, service code and modifiers as a line in ' + hits[n].join(', ') + '.';
+    if (extension) notes.push(msg + ' Allowed only because this dispute has an extension reason: check that it applies.');
+    else blocking.push(msg + ' The portal does not accept duplicate line items.');
+  });
+  return { blocking: blocking, notes: notes };
+}
+
+/** Checks that do not block Ready: amounts, claims already in other disputes, allowed repeats, the notice to the other party. */
 function warnings_(d, lines, allDisputes, allLines) {
   const out = [];
   const isAmt = function (v) { return /^\d+(\.\d{1,2})?$/.test(String(v == null ? '' : v)); };
@@ -947,10 +1413,6 @@ function warnings_(d, lines, allDisputes, allLines) {
     const c = String(l.claim_number || '').trim();
     if (c && claims.indexOf(c) === -1) claims.push(c);
   });
-  if (d.dispute_kind === 'Single dispute' && claims.length > 1) {
-    out.push('This is marked "Single dispute" but has ' + claims.length + ' different claim numbers. Check "What are you disputing today?".');
-  }
-
   const status = {};
   allDisputes.forEach(function (r) { status[r.DisputeID] = r.Status; });
   const elsewhere = {};
@@ -963,21 +1425,55 @@ function warnings_(d, lines, allDisputes, allLines) {
   Object.keys(elsewhere).forEach(function (c) {
     out.push('Claim ' + c + ' is also in ' + Object.keys(elsewhere[c]).map(function (i) { return i + ' (' + elsewhere[c][i] + ')'; }).join(', ') + '.');
   });
+  duplicateLines_(d, lines, allDisputes, allLines).notes.forEach(function (n) { out.push(n); });
 
-  const dl = businessDeadline_(d.on_start_date);
-  if (dl && todayStr_() <= dl.onEnds) {
-    out.push('Open negotiation runs until ' + fmt_(dl.onEnds, 'date') + '. The dispute can be initiated from the next business day.');
+  const dl = d.Status === STATUS.filed ? null : businessDeadline_(d.on_start_date);
+  if (dl && dl.band === 'early') out.push(windowNotice_(dl));
+
+  if (noticeLate_(d)) {
+    out.push(d.nip_notified_date
+      ? 'The non-initiating party was sent the Notice of IDR Initiation on ' + fmt_(d.nip_notified_date, 'date') + ', not on the filing day (' +
+        fmt_(String(d.FiledAt).slice(0, 10), 'date') + '). It must be sent the same day.'
+      : 'No date recorded for sending the Notice of IDR Initiation to the non-initiating party.');
   }
   return out;
 }
 
-function checkField_(f, value, record) {
+function windowNotice_(dl) {
+  return 'Filing window opens ' + fmt_(dl.opens, 'date') + ' (open negotiation business day ' + dl.b + ' today). The US desk can file from ' +
+    fmt_(dl.opens, 'date') + ' to ' + fmt_(dl.initiateBy, 'date') + '.';
+}
+
+/** US desk actions need the initiation window open (business day 31 or later): the portal refuses earlier. */
+function assertWindowOpen_(d) {
+  const dl = businessDeadline_(d.on_start_date);
+  if (dl && dl.band === 'early') throw new Error(MSG.onEarly + ' Filing window opens ' + fmt_(dl.opens, 'date') + '.');
+}
+
+/** Problem with one value, or ''. record: the dispute or line it belongs to; ctx: see ruleCtx_. */
+function checkField_(f, value, record, ctx) {
+  record = record || {};
+  if (!fieldShown_(f, record, ctx) || f.type === 'fixed') return '';
   let v = value == null ? '' : String(value).trim();
-  const required = f.required || (f.requiredIf && String(record[f.requiredIf.key] || '').indexOf(f.requiredIf.includes) !== -1);
-  if (v && isPlaceholder_(v) && f.type !== 'checkboxes') return required ? 'is required ("' + v + '" is not accepted)' : '';
-  if (!v) return required ? 'is required' : '';
+  const required = fieldRequired_(f, record, ctx);
+  const missing = f.requiredMsg || 'is required';
+  if (v && isPlaceholder_(v) && f.type !== 'checkboxes') return required ? missing + ' ("' + v + '" is not accepted)' : '';
+  if (!v) return required ? missing : '';
+  if (f.type === 'check') return v === 'Yes' || !required ? '' : 'must be ticked';
   if (f.digits) v = v.replace(/[\s-]/g, '');
+  if (f.upper) v = v.toUpperCase();
   if (f.pattern && !new RegExp(f.pattern).test(v)) return f.patternMsg || 'is not in the right format';
+  if (Array.isArray(f.options) && (f.type === 'radio' || f.type === 'select') && f.options.indexOf(v) === -1) return 'is not one of the portal’s options';
+  if (f.strict && typeof f.options === 'string' && (options_()[f.options] || []).indexOf(v) === -1) return 'is not one of the portal’s options';
+  if (f.chars) {
+    const bad = badChars_(f.chars, v);
+    if (bad.length) return 'has characters the portal does not accept (' + bad.join(' ') + '). Allowed: ' + CHAR_HELP[f.chars] + '.';
+  }
+  if (f.multi && f.itemPattern) {
+    const items = splitMulti_(v);
+    const re = new RegExp(f.itemPattern);
+    if (items.length > (f.maxItems || 99) || items.some(function (x) { return !re.test(x); })) return f.itemMsg || 'is not in the right format';
+  }
   if (f.type === 'zip' && !/^\d{5}(-\d{4})?$/.test(normZip_(v))) return 'must be 5 or 9 digits, like 76132 or 76132-1234';
   if (f.type === 'phone' && !/^\(\d{3}\) \d{3}-\d{4}$/.test(normPhone_(v))) return 'must be 10 digits, like (817) 566-1232';
   if (f.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return 'is not a valid email';
@@ -985,20 +1481,26 @@ function checkField_(f, value, record) {
   if (f.type === 'date') {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'must be a date';
     if (f.min && v < f.min) return 'must be on or after ' + f.min;
-    if (f.max === 'today' && v > todayStr_()) return 'cannot be in the future';
+    if (f.max === 'today' && v > ((ctx && ctx.today) || todayStr_())) return 'cannot be in the future';
+    const lim = f.before && ctx && ctx.dispute ? String(ctx.dispute[f.before] || '') : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(lim) && v >= lim) return 'must be before the open negotiation start date (' + fmt_(lim, 'date') + ')';
   }
   return '';
 }
 
-/** The stored form of a typed value: phones as (817) 566-1232, ZIP+4 with a hyphen, Tax ID and NPI as digits. */
+/** The stored form of a typed value: phones as (817) 566-1232, ZIP+4 with a hyphen, Tax ID and NPI as digits, modifiers "25; 59". */
 function normValue_(f, v) {
+  if (f.type === 'fixed') return f.value;
   if (v == null) return '';
   if (Array.isArray(v)) return v;
   let s = String(v).trim();
   if (f.type === 'phone') s = normPhone_(s);
   if (f.type === 'zip') s = normZip_(s);
   if (f.type === 'money') s = s.replace(/[$,\s]/g, '');
+  if (f.type === 'check') s = /^(yes|true|on|1)$/i.test(s) ? 'Yes' : '';
   if (f.digits) s = s.replace(/[\s-]/g, '');
+  if (f.multi) s = normModifiers_(s);
+  if (f.upper) s = s.toUpperCase();
   return s;
 }
 
@@ -1026,6 +1528,7 @@ function shortLabel_(label) {
 
 function buildConfirmationPdf_(id) {
   const full = getDispute(id);
+  const kind = full.dispute.dispute_kind;
   const t = HtmlService.createTemplateFromFile('Pdf');
   t.data = {
     id: id,
@@ -1036,7 +1539,7 @@ function buildConfirmationPdf_(id) {
     files: full.files,
     warnings: full.warnings,
     deadline: full.deadline,
-    columns: schema_().final.columns,
+    columns: schema_().final.columns.filter(function (c) { return !c.kinds || c.kinds.indexOf(kind) !== -1; }),
     generatedBy: currentUser_(),
     generatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, yyyy h:mm a z')
   };
@@ -1148,7 +1651,7 @@ let FIELD_TYPES_ = null;
 
 function fieldTypes_() {
   if (FIELD_TYPES_) return FIELD_TYPES_;
-  const out = {};
+  const out = { nip_notified_date: 'date' };
   const s = schema_();
   headerFields_(s).concat(lineFields_(s)).forEach(function (f) { out[f.key] = f.type; });
   FIELD_TYPES_ = out;
@@ -1300,9 +1803,9 @@ function guard_(v) {
   return typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v;
 }
 
-function fileRecord_(id, category, lineNo, name, file) {
+function fileRecord_(id, category, lineNo, name, file, size) {
   return { DisputeID: id, Category: category, LineNo: lineNo || '', Name: safe_(name), Url: file.getUrl(),
-    FileId: file.getId(), UploadedBy: currentUser_(), UploadedAt: nowStr_() };
+    FileId: file.getId(), UploadedBy: currentUser_(), UploadedAt: nowStr_(), Size: size || '' };
 }
 
 function newId_() {
@@ -1370,21 +1873,41 @@ function requireAdmin_() {
 }
 
 // The Options rows are cached for 10 minutes. Saving a new value or editing the Options tab
-// clears the cache (see learnFlush_ and onEdit).
+// clears the cache (see learnFlush_ and onEdit). With about 600 seeded rows, the cache keeps
+// compact rows ([List, Value, Label, Data, Count, LastUsed, Source, Status, AddedAt]) to stay
+// under the 100 KB cache limit.
 let OPTION_ROWS_ = null;
 let OPTIONS_ = null;
+const OPTION_CACHE_COLS = ['List', 'Value', 'Label', 'Data', 'Count', 'LastUsed', 'Source', 'Status', 'AddedAt'];
 
 /** Every Options row, hidden ones included, with Count as a number. */
 function optionRows_() {
   if (OPTION_ROWS_) return OPTION_ROWS_;
   const cache = CacheService.getScriptCache();
   const hit = cache.get('options');
-  if (hit) return (OPTION_ROWS_ = JSON.parse(hit));
+  if (hit) {
+    const parsed = JSON.parse(hit);
+    return (OPTION_ROWS_ = parsed.map(function (r) {
+      if (!Array.isArray(r)) return r;
+      const o = {};
+      OPTION_CACHE_COLS.forEach(function (c, i) { o[c] = r[i] == null ? '' : r[i]; });
+      o.Count = Number(o.Count) || 0;
+      o.Source = o.Source === 'l' ? 'learned' : o.Source === 's' ? 'seed' : o.Source;
+      o.Status = o.Status === 'H' ? HIDDEN : ACTIVE;
+      return o;
+    }));
+  }
   const out = readTab_(TABS.options).filter(function (r) { return r.List && r.Value !== ''; }).map(function (r) {
     return { List: String(r.List), Value: String(r.Value), Label: r.Label || '', Data: r.Data || '', Count: Number(r.Count) || 0,
       LastUsed: r.LastUsed || '', Source: r.Source || 'seed', Status: r.Status === HIDDEN ? HIDDEN : ACTIVE, AddedAt: r.AddedAt || '' };
   });
-  try { cache.put('options', JSON.stringify(out), 600); } catch (e) { /* too large to cache: read each time */ }
+  const compact = out.map(function (r) {
+    const row = [r.List, r.Value, r.Label, r.Data, r.Count, r.LastUsed, r.Source === 'learned' ? 'l' : r.Source === 'seed' ? 's' : r.Source,
+      r.Status === HIDDEN ? 'H' : 'A', r.AddedAt];
+    while (row.length && (row[row.length - 1] === '' || row[row.length - 1] === 0)) row.pop();
+    return row;
+  });
+  try { cache.put('options', JSON.stringify(compact), 600); } catch (e) { /* too large to cache: read each time */ }
   return (OPTION_ROWS_ = out);
 }
 
@@ -1447,7 +1970,10 @@ function clearOptionsCache_() {
 
 let SETTINGS_ = null;
 
-/** The Settings tab with defaults filled in: { LearningMode: 'On' | 'Off', DefaultWindow: number, DefaultShare: 0-1 }. */
+/**
+ * The Settings tab with defaults filled in: { LearningMode: 'On' | 'Off', DefaultWindow: number, DefaultShare: 0-1,
+ * ComplexStates: ['TX', ...] }.
+ */
 function getSettings_() {
   if (SETTINGS_) return SETTINGS_;
   const cache = CacheService.getScriptCache();
@@ -1462,6 +1988,8 @@ function getSettings_() {
   let share = parseFloat(String(out.DefaultShare).replace('%', ''));
   if (share > 1) share = share / 100; // 80 or 80% means 0.8
   out.DefaultShare = share > 0 && share <= 1 ? share : SETTING_DEFAULTS.DefaultShare;
+  out.ComplexStates = Array.isArray(out.ComplexStates) ? out.ComplexStates
+    : String(out.ComplexStates || '').split(/[,;\s]+/).map(function (s) { return s.trim().toUpperCase(); }).filter(String);
   try { cache.put('settings', JSON.stringify(out), 600); } catch (e) { /* read again next time */ }
   return (SETTINGS_ = out);
 }
@@ -1522,7 +2050,7 @@ function setup() {
 
   ensure(TABS.disputes, DISPUTE_META.concat(headerKeys_()));
   ensure(TABS.lines, LINE_META.concat(lineKeys_()));
-  ensure(TABS.files, ['DisputeID', 'Category', 'LineNo', 'Name', 'Url', 'FileId', 'UploadedBy', 'UploadedAt']);
+  ensure(TABS.files, FILE_COLS);
   ensure(TABS.log, ['Timestamp', 'User', 'DisputeID', 'Event', 'Details']);
   migrateOptions_(style);
   ensure(TABS.options, OPTION_COLS);
@@ -1531,12 +2059,17 @@ function setup() {
   // Send queued SpreadsheetApp changes before anything reads the tabs through the Sheets API.
   SpreadsheetApp.flush();
   TABLES_ = {};
+  clearOptionsCache_();
+  const changed = migrateOptionsV3_();
   const added = seedOptions_();
+  const aliased = applySeedAliases_();
   seedSettings_();
+  const migrated = migrateRecordsV3_();
   clearOptionsCache_();
   CacheService.getScriptCache().removeAll(['settings', 'defaults']);
   rootFolder_();
-  Logger.log('Options: ' + added + ' seed value(s) added.');
+  Logger.log('Options: ' + added + ' seed value(s) added, ' + changed + ' updated for v3, ' + aliased + ' alias(es) applied.');
+  Logger.log('Saved records updated for v3: ' + migrated.disputes + ' dispute(s), ' + migrated.lines + ' line item(s).');
   Logger.log(useApi_() ? 'Using the Google Sheets API advanced service.' : 'Google Sheets API advanced service is off: using SpreadsheetApp (slower).');
   Logger.log('Setup complete. Deploy as a web app: Execute as Me, access Anyone within your organization.');
 }
@@ -1555,7 +2088,8 @@ function migrateOptions_(style) {
   const iValue = have.indexOf('Value');
   const old = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, have.length).getValues() : [];
   const recs = old.filter(function (r) {
-    return r[iList] !== '' && r[iValue] !== '' && !(r[iList] === 'HealthPlanType' && OLD_PLAN_TYPES.indexOf(String(r[iValue])) !== -1);
+    return r[iList] !== '' && r[iValue] !== '' && !(r[iList] === 'HealthPlanType' && OLD_PLAN_TYPES.indexOf(String(r[iValue])) !== -1 &&
+      PLAN_TYPES.indexOf(String(r[iValue])) === -1);
   }).map(function (r) { return recordToRow_(OPTION_COLS, optionRecord_(String(r[iList]), String(r[iValue]), { addedBy: 'setup (migrated)' })); });
   sh.clearContents();
   sh.getRange(1, 1, 1, OPTION_COLS.length).setValues([OPTION_COLS]);
@@ -1569,15 +2103,53 @@ function migrateOptions_(style) {
   Logger.log('Options tab moved to the new columns: ' + recs.length + ' row(s) kept.');
 }
 
+// v2 seed values renamed in place in v3 (same row, so counts and profiles stay).
+const SEED_RENAMES = [
+  ['BillingEntity', 'SILVER ALLIANCE LLC', 'Silver Alliance, LLC'],
+  ['BillingEntity', 'CAPITAL HEALTH PLLC', 'Capital Health, PLLC']
+];
+
+/**
+ * Upgrade of the v2 lists: renames the two billing entities to their legal names, hides Health Plan
+ * Types that are not one of the portal's 7 options, and drops the unused seed code 99281. Returns rows changed.
+ */
+function migrateOptionsV3_() {
+  const t = table_(TABS.options);
+  const dirty = {};
+  const exact = {};
+  t.rows.forEach(function (r) { exact[r.List + '|' + r.Value] = true; });
+  t.rows.forEach(function (r, i) {
+    if (!r.List) return;
+    const rec = Object.assign({}, r);
+    let ch = false;
+    SEED_RENAMES.forEach(function (x) {
+      if (r.List === x[0] && r.Value === x[1] && !exact[x[0] + '|' + x[2]]) {
+        rec.Value = x[2];
+        rec.Data = JSON.stringify(Object.assign(parseData_(r.Data), { acting_as_confirmed: true }));
+        ch = true;
+      }
+    });
+    if (r.List === 'HealthPlanType' && PLAN_TYPES.indexOf(r.Value) === -1 && r.Status !== HIDDEN) { rec.Status = HIDDEN; ch = true; }
+    if (ch) dirty[i + 2] = rec;
+  });
+  writeRows_(TABS.options, t.header, dirty);
+  const dropped = deleteWhere_(TABS.options, function (r) {
+    return (r.List === 'ServiceCode' && r.Value === '99281' && r.Source === 'seed' && !(Number(r.Count) > 0)) ||
+      (r.List === 'HealthPlanType' && OLD_PLAN_TYPES.indexOf(r.Value) !== -1 && PLAN_TYPES.indexOf(r.Value) === -1 && !(Number(r.Count) > 0));
+  });
+  return Object.keys(dirty).length + dropped;
+}
+
 /** Adds the seed values that are missing (matched ignoring case and punctuation). Returns how many were added. */
 function seedOptions_() {
   const rows = readTab_(TABS.options);
   const have = {};
+  const exact = {};
   const lists = {};
-  rows.forEach(function (r) { have[r.List + '|' + optionKey_(r.Value)] = true; lists[r.List] = true; });
-  // Placeholder plan types left by a partial migration.
-  deleteWhere_(TABS.options, function (r) {
-    return r.List === 'HealthPlanType' && OLD_PLAN_TYPES.indexOf(r.Value) !== -1 && !(Number(r.Count) > 0);
+  rows.forEach(function (r) {
+    exact[r.List + '|' + r.Value] = true;
+    lists[r.List] = true;
+    if (!parseData_(r.Data).mergedInto) have[r.List + '|' + optionKey_(r.Value)] = true;
   });
   const me = Session.getActiveUser().getEmail();
   const seeds = seedRows_();
@@ -1585,13 +2157,35 @@ function seedOptions_() {
   if (me && !lists.Admin) seeds.push(['Admin', me, '', null, 0]);
   const add = [];
   seeds.forEach(function (s) {
-    const k = s[0] + '|' + optionKey_(s[1]);
-    if (have[k]) return;
-    have[k] = true;
-    add.push(optionRecord_(s[0], s[1], { label: s[2], data: s[3], count: s[4], source: 'seed', addedBy: 'setup' }));
+    const alias = !!(s[3] && s[3].mergedInto);
+    // An alias row ("Health Now" for "HealthNow") is matched on its exact spelling.
+    if (alias ? exact[s[0] + '|' + s[1]] : have[s[0] + '|' + optionKey_(s[1])]) return;
+    if (alias) exact[s[0] + '|' + s[1]] = true; else have[s[0] + '|' + optionKey_(s[1])] = true;
+    add.push(optionRecord_(s[0], s[1], { label: s[2], data: s[3], count: s[4], source: 'seed', status: s[5] || ACTIVE, addedBy: 'setup' }));
   });
   appendRecords_(TABS.options, add);
   return add.length;
+}
+
+// Aliases of the seed: typing the old name counts toward the new one (see learn_).
+const SEED_ALIASES = [
+  ['Payer', 'United Healthcare', 'UHC'],
+  ['Payer', 'BLUECROSS BLUESHIELD', 'BCBS'],
+  ['Payer', 'Health Now', 'HealthNow']
+];
+
+/** A v2 row that is now an alias (United Healthcare, BLUECROSS BLUESHIELD) is merged into the new value. Returns how many. */
+function applySeedAliases_() {
+  let n = 0;
+  SEED_ALIASES.forEach(function (a) {
+    TABLES_ = {};
+    const row = readTab_(TABS.options).filter(function (r) { return r.List === a[0] && r.Value === a[1]; })[0];
+    if (!row || parseData_(row.Data).mergedInto === a[2]) return;
+    updateOption_(a[0], a[1], { mergeInto: a[2] });
+    n++;
+  });
+  TABLES_ = {};
+  return n;
 }
 
 function seedSettings_() {
@@ -1600,59 +2194,184 @@ function seedSettings_() {
   const notes = {
     LearningMode: 'On: new values typed by users are active at once (training). Off: they are added as Hidden until an admin activates them.',
     DefaultWindow: 'How many recent saved records the learned defaults look at.',
-    DefaultShare: 'Share of those records (0 to 1) one value needs to become the default.'
+    DefaultShare: 'Share of those records (0 to 1) one value needs to become the default.',
+    ComplexStates: 'States on CMS\'s Complex State list, comma separated (like TX, NM). Lines with a location in the list need the state-specific eligibility attestation. Empty until confirmed.'
   };
   const add = Object.keys(SETTING_DEFAULTS).filter(function (k) { return !have[k]; })
     .map(function (k) { return { Key: k, Value: String(SETTING_DEFAULTS[k]), Note: notes[k] }; });
   appendRecords_(TABS.settings, add);
 }
 
+// v2 values of saved records mapped to v3.
+const OLD_KIND_MAP = { 'Single dispute': [DISPUTE_TYPES[0], 'No'], 'A batched dispute': [DISPUTE_TYPES[1], ''],
+  'A bundled dispute': [DISPUTE_TYPES[0], 'Yes'] };
+const OLD_ROLE_MAP = { 'Group Health Plan': PLAN_ROLE[0], 'Federal Employees Health Benefits (FEHB) carrier': PLAN_ROLE[2] };
+
+/**
+ * Upgrade of saved disputes and lines (idempotent): the v2 dispute_kind becomes dispute_type, bundled_payment and the
+ * derived kind; the v2 plan roles get the portal's spelling; I'm a(n) comes from the v2 designation when empty;
+ * modifiers become "; "-separated. Returns { disputes, lines } changed.
+ */
+function migrateRecordsV3_() {
+  TABLES_ = {};
+  const t = table_(TABS.disputes);
+  const dirty = {};
+  t.rows.forEach(function (r, i) {
+    if (!r.DisputeID) return;
+    const rec = Object.assign({}, r);
+    const m = OLD_KIND_MAP[r.dispute_kind];
+    if (m && !r.dispute_type) {
+      rec.dispute_type = m[0];
+      if (m[1]) rec.bundled_payment = m[1];
+    }
+    if (rec.dispute_type) rec.dispute_kind = disputeKind_(rec.dispute_type, rec.bundled_payment);
+    if (OLD_ROLE_MAP[r.plan_role]) rec.plan_role = OLD_ROLE_MAP[r.plan_role];
+    if (!r.q_acting_as && ACTING_AS.indexOf(r.prov_designation) !== -1) rec.q_acting_as = r.prov_designation;
+    if (t.header.some(function (h) { return String(rec[h]) !== String(r[h]); })) dirty[i + 2] = rec;
+  });
+  writeRows_(TABS.disputes, t.header, dirty);
+
+  const lt = table_(TABS.lines);
+  const ldirty = {};
+  lt.rows.forEach(function (r, i) {
+    if (!r.DisputeID || !r.modifiers) return;
+    const m = normModifiers_(r.modifiers);
+    if (m !== r.modifiers) ldirty[i + 2] = Object.assign({}, r, { modifiers: m });
+  });
+  writeRows_(TABS.lines, lt.header, ldirty);
+  return { disputes: Object.keys(dirty).length, lines: Object.keys(ldirty).length };
+}
+
 // ------------------------------------------------------------------ seed lists
-// Business data from the Notices of IDR Initiation seen so far (payers, our billing entities,
-// IDR entities, service codes). Counts are how often each value appeared. No claim numbers,
-// dates of service or account numbers are kept here.
+// Business data only: our billing entities (legal names as given by the business), the
+// non-initiating parties we dispute with, IDR entities and service codes. Counts are how often
+// a value appeared on the Notices of IDR Initiation seen so far. No claim numbers, dates of
+// service or account numbers are kept here.
 
 const US_STATES = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
   'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA',
   'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'AS', 'GU', 'MP', 'PR', 'VI'];
 
-/** [list, value, label, data, count] */
+// Our billing entities, exact legal spelling (not corrected; see the README for names to confirm).
+const SEED_ENTITIES = ['Jade Medical, PLLC', 'Deerfield plains, LLC', 'CareMed, PLLC', 'Sycamore Rush, LLC', 'WRFER University, LLC',
+  'Windview First, PLLC', 'Capital Health, PLLC', 'Silver Alliance, LLC', 'Trans Oakley, LLC', 'Eastern Elm, PLLC', 'Lakewood Green, LLC',
+  'Silver choice, PLLC', 'Greenwood South, LLC', 'Aspen Willow, PLLC', 'RSER Benbrook, LLC', 'TotalCare ER Benbrook, PLLC',
+  'Cedar Physcians, PLLC', 'WFRER Denton, LLC', 'Sun Choice, PLLC', 'WFRER Cooper, LLC', 'Greenview Physicians, PLLC',
+  'Hillside Alliance, LLC', 'Everwell Medical, PLLC', 'Gracious Health, LLC'];
+
+// Non-initiating parties (plans, issuers, TPAs), as given by the business.
+const SEED_PAYERS = [
+  '90 Degree Benefits', 'ABA', 'Aetna', 'Allegiance', 'Allegiance Benefi Plan Management, Inc', 'Allied Benefit Systems, Inc.',
+  'Allstate', 'Ambetter-Superior HealthPlan', 'Angle Health', 'Ameriben', 'APWU Health Plan', 'Assured Benefits Administrator',
+  'AULTCARE', 'Auxiant', 'Baylor Scott & White', 'BCBS', 'Benefit & Risk Management Services- BRMS', 'BENEFITS HEALTHSMART',
+  'Boon Chapman', 'Bright HealthCare', 'Cantex Inc', 'CareFactor', 'Centivo', 'CGS Health', 'Chesterfield Resources Inc.',
+  'Cigna', 'CITY OF FORT WORTH', 'Coeur Plan', 'Concord Hospital Entreprises', 'Connected Care',
+  'COOK CHILDREN\'S HEALTH CARE SYSTEM', 'Dean Health Plan', 'EMI Health', 'Employers Health Network',
+  'Enterprise Group Planning, INC', 'EVHC', 'First Health Network', 'Fringe Benefit Group',
+  'GEHA (Government Employees Health Association, Inc.)', 'Golden Rule', 'GPA', 'Gravie Administrative Services',
+  'Group Management Services', 'Health Choice', 'HEALTH COMP', 'Health EZ', 'Health New England', 'Health Now',
+  'Health Partners', 'Health Plans Inc.', 'Healthcare Highways', 'Healthgram', 'healthnet', 'HealthNow', 'HealthScope Benefits',
+  'Healthsmart', 'Humana', 'IBEW-NECA Southwestern Health & Benefit Fund', 'IDA', 'Imagine 360', 'Imagine Health', 'JP Farley',
+  'Insurance Management Services', 'Insurance Administrator of America', 'Insurance Medical Services', 'Kaiser Permanente',
+  'LaSalle Management', 'LIFEX', 'Lucent Health', 'Luminare Health', 'MARPAI', 'Medica', 'Medica Insurance Company',
+  'Medical Mutual', 'Meritain Health', 'Minnesota Laborers Health & Welfare Fund', 'MN Teamsters Construction DIVHW Fund',
+  'Moda Health', 'NALC Health Benefit Plan', 'Orchestrate', 'Phia Group', 'Personify Health West', 'Point C', 'Priority Health',
+  'Professional Benefit Administators', 'Progressive', 'Providence administrative Services', 'Providence Health Plan',
+  'Quantum Health', 'Reflect Health', 'S&S HealthCare Strategies', 'Sage', 'SAMBA', 'Sana Benefits',
+  'Seafarers Health and Benefits Plan', 'Select Health', 'Sharp Health Plan', 'SHL Solutions', 'Simplan', 'SISCO',
+  'Star Marketing and Admin, Inc.', 'Texas Iron Workers Health Benefit Fund', 'The Health Plan', 'The Loomis Company',
+  'Total Affiliates Health & Welfare Plan', 'TrustMark', 'UFCW', 'UFCW Med 1000', 'UHC', 'UHC Shared Services', 'UHC Surest',
+  'UHSS', 'UMR', 'Unified Group Services', 'UNITED AGRICULTURAL BENEFIT TRUST', 'United Benefit Fund', 'UPMC', 'US Benefits',
+  'Vitori Health', 'WebTPA', 'YUZU Health', 'ZELIS', 'Friday Health Plan', 'Unite Here Health'
+];
+
+// Service codes we bill (value = code). Descriptions are seeded only for the codes seen on the notices; the others are learned.
+const SEED_CODES = [
+  '99285 99284 99291 70450 74176 0202U 71046 71100 99283 27780 99000 36410 76705 96372 74177 96365 96366 96368 96375 72125',
+  '73030 76870 A4670 94761 96374 93005 E0445 96361 99239 G0378 73552 71250 Q9967 94760 90471 74022 99282 94640 73110 72128',
+  '93971 70486 87507 L3809 A4649 12013 73130 A4467 76830 74019 73610 10120 73630 84484 82553 83874 85379 85025 29584 80051',
+  '82550 82565 82947 84520 A4770 A9150 70490 A4657 J7613 A4616 E0441 86769 87428 A6453 E1399 A4930 73562 73080 A6449 A4223',
+  '82247 82040 81003 84075 84450 82977 84460 82150 84155 36000 29125 87880 J8499 12001 73140 96360 76882 L4361 72100 A6203',
+  '96523 80053 74018 81025 80305 72193 87040 87077 87076 93010 G0328 82270 J1100 36415 80076 29505 L1830 73700 99001 87081',
+  'A4452 87184 87591 87491 87086 10061 83605 82803 73090 29260 86308 L4360 76856 93975 76937 71260 A4216 G9315 J0500 96367',
+  '99234 12011 71045 70491 J7512 69200 69210 J7799 J7620 J7699 Q0144 J0696 64400 A4245 A4248 90715 E0114 J1885 A6413 A4215',
+  'A4566 A9273 97010 A6454 A6403 83880 J0131 96376 76536 93040 72072 36416 J8540 A4305 S1015 J7030 J2405 J1200 72131 97116',
+  '73590 A4559 J2550 J1836 J2270 J7120 S0164 72040 J2919 S0028 70360 82948 J3010 J3490 J1170 87205 12002 L3908 J7050 90714',
+  'A4550 A6250 A4209 A4246 87661 87563 87798 A9270 J2543 A4332 84702 76801 86901 76817 86900 J0171 L3260 76770 29540 29515',
+  'S0119 J0295 29581 87070 87075 A4217 A6446 A6219 Q4018 29105 73010 29130 A4364 A6407 A6252 71275 76775 G8598 86803 99292',
+  '81513 87481 J0706 J2470 J2060 A4253 86695 86696 86592 94664 84439 73660 84436 84443 84479 A4615 A7015 J1650 J0736 73620',
+  'A4244 94762 J7999 64450 11740 87529 87265 87580 87420 99235 86677 93976 29280 J3480 83735 80048 87631 87635 85045 J2490',
+  '12004 J7510 93970 93041 A6222 85610 J0744 10060 73200 70496 70498 23650 74178 28190 29550 80320 12032 99222 76857 86735',
+  '73120 93931 11760 73502 72192 95992 12052 80143 87181 A4316 J8498 16020 86140 85652 71101 76641 21480 12014 A6251 A6196',
+  'J1308 87506 A4301 74175 73100 25605 99152 99153 75989 30300 73070 24600 A6457 10021 29240 73060 Q9963 J1815 J1010 30901',
+  'J2930 Q4049 82105 82378 86304 82747 87389 86708 86706 87340 86704 83036 J0616 76700 84156 82570 99238 20610 84550 70110',
+  '70480 73600 51702 43752 12051 65222 84481 76805 70487 11730 70488 11750 16025'
+].join(' ').split(' ');
+
+// The 29 codes seen on the notices: [description, times seen].
+const OBSERVED_CODES = {
+  '99283': ['EMERGENCY ROOM SERVICE', 1], '99284': ['EMERGENCY ROOM SERVICE', 3], '94761': ['MEASURE BLOOD OXYGEN LEVEL', 2],
+  '12001': ['REPAIR- TRUNK/SCALP/NECK/AXIL/LIMBS <2.5', 1], 'A4670': ['AUTOMATIC BLOOD PRESSURE MONITOR', 2],
+  'A6413': ['ADHESIVE BANDAGE, FIRST-AID', 2], 'A4930': ['GLOVES STERILE PER PAIR', 1], 'A4248': ['CHLORHEXIDINE ANTISEPT', 1],
+  '82150': ['ASSAY OF AMYLASE', 1], '81003': ['URINALYSIS, AUTO, W/O SCOPE', 1], '81025': ['URINE PREGNANCY TEST', 2],
+  '85025': ['COMPLETE CBC W/AUTO DIFF WBC', 1], '80051': ['ELECTROLYTE PANEL', 1], '82550': ['ASSAY OF CK (CPK)', 1],
+  '82565': ['ASSAY OF CREATININE', 1], '82947': ['ASSAY, GLUCOSE, BLOOD QUANT', 1], '84520': ['ASSAY OF UREA NITROGEN', 1],
+  '80076': ['HEPATIC FUNCTION PANEL', 1], '10061': ['DRAINAGE OF SKIN ABSCESS', 1], 'J3490': ['PHARMACY', 1],
+  'J0696': ['Injection, ceftriaxone sodium, per 250 mg', 1], '96372': ['THERAPY/PROPHYLAXIS/DIAGNOSIS INJECTION, SC/IM', 1],
+  '72125': ['CT NECK SPINE W/O DYE', 1], '70450': ['CT HEAD/BRAIN W/O DYE', 1], '72128': ['Computed tomography, thoracic spine', 1],
+  'J1885': ['Injection, ketorolac tromethamine, per 15 mg', 1], 'A4215': ['NEEDLES ONLY STERILE ANY SIZE EACH', 1],
+  'A4657': ['SYRINGE WITH OR WITHOUT NEEDLE EACH', 1], 'E1399': ['Durable medical equipment, miscellaneous', 1]
+};
+
+/** [list, value, label, data, count, status] */
 function seedRows_() {
   const rows = [];
-  const add = function (list, value, label, data, count) { rows.push([list, value, label || '', data || null, count || 0]); };
+  const add = function (list, value, label, data, count, status) { rows.push([list, value, label || '', data || null, count || 0, status || '']); };
   US_STATES.forEach(function (s) { add('State', s); });
 
+  // Profiles seen on the notices. The other entities' profiles are learned on their first save.
   const totalcare = { addr1: '6049 S. Hulen St.', city: 'Fort Worth', state: 'TX', zip: '76132',
     email: 'cedarhill.negotiations@totalcare.us', phone: '(817) 566-1232' };
-  add('BillingEntity', 'SILVER ALLIANCE LLC', 'Health care facility',
-    Object.assign({ acting_as: 'Health care facility', tin: '862923814', npi: '1972273233' }, totalcare), 3);
-  add('BillingEntity', 'CAPITAL HEALTH PLLC', 'Health care provider',
-    Object.assign({ acting_as: 'Health care provider', tin: '872524265', npi: '1609548056', group_name: 'Totalcare ER, Cedar Hill' }, totalcare), 1);
+  const profiles = {
+    'Silver Alliance, LLC': [Object.assign({ acting_as: 'Health care facility', acting_as_confirmed: true, tin: '862923814', npi: '1972273233' }, totalcare), 3],
+    'Capital Health, PLLC': [Object.assign({ acting_as: 'Health care provider', acting_as_confirmed: true, tin: '872524265', npi: '1609548056',
+      group_name: 'Totalcare ER, Cedar Hill' }, totalcare), 1]
+  };
+  SEED_ENTITIES.forEach(function (name) {
+    // First guess from the legal form: PLLC = provider, LLC = facility. A saved dispute confirms it.
+    const guess = /\bPLLC\s*$/i.test(name) ? ACTING_AS[0] : ACTING_AS[1];
+    const p = profiles[name];
+    add('BillingEntity', name, p ? p[0].acting_as : guess, p ? p[0] : { acting_as: guess, acting_as_confirmed: false }, p ? p[1] : 0);
+  });
 
-  add('Payer', 'UMR', '', { addr1: 'PO BOX 30541', city: 'SALT LAKE CITY', state: 'UT', zip: '84130', email: 'idr@clearhealthcloud.com', phone: '(877) 233-1800' }, 1);
-  add('Payer', 'BLUECROSS BLUESHIELD', '', { addr1: 'PO BOX 660044', city: 'Dallas', state: 'TX', zip: '75266', email: 'nsa.disputes@bcbstx.com', phone: '(800) 451-0287' }, 1);
-  add('Payer', 'Cigna', '', { addr1: 'P.O. BOX 182223', city: 'CHATTANOOGA', state: 'TN', zip: '37422-7223', email: 'nsaidr@multiplan.com', phone: '(800) 244-6224' }, 1);
-  add('Payer', 'United Healthcare', '', { addr1: 'PO Box 30783', city: 'Salt Lake City', state: 'UT', zip: '84130-0783', email: 'uhg_idr_disputes@uhc.com', phone: '(877) 842-3210' }, 1);
+  const payerProfiles = {
+    'UMR': { addr1: 'PO BOX 30541', city: 'SALT LAKE CITY', state: 'UT', zip: '84130', email: 'idr@clearhealthcloud.com', phone: '(877) 233-1800' },
+    'BCBS': { addr1: 'PO BOX 660044', city: 'Dallas', state: 'TX', zip: '75266', email: 'nsa.disputes@bcbstx.com', phone: '(800) 451-0287' },
+    'Cigna': { addr1: 'P.O. BOX 182223', city: 'CHATTANOOGA', state: 'TN', zip: '37422-7223', email: 'nsaidr@multiplan.com', phone: '(800) 244-6224' },
+    'UHC': { addr1: 'PO Box 30783', city: 'Salt Lake City', state: 'UT', zip: '84130-0783', email: 'uhg_idr_disputes@uhc.com', phone: '(877) 842-3210' }
+  };
+  const aliasOf = {};
+  SEED_ALIASES.forEach(function (a) { if (a[0] === 'Payer') aliasOf[a[1]] = a[2]; });
+  SEED_PAYERS.forEach(function (name) {
+    if (aliasOf[name]) return;
+    add('Payer', name, '', payerProfiles[name] || null, payerProfiles[name] ? 1 : 0);
+  });
+  SEED_ALIASES.forEach(function (a) { add(a[0], a[1], '', { mergedInto: a[2] }, 0, HIDDEN); });
 
   add('IdrEntity', 'Maximus Federal Services Inc', '', null, 2);
   add('IdrEntity', 'Capitol Bridge LLC', '', null, 1);
   add('IdrEntity', 'Federal Hearings and Appeals Services, LLC', '', null, 1);
 
-  add('HealthPlanType', PLAN_TYPE_DEFAULT, '', null, 4);
+  PLAN_TYPES.forEach(function (p) { add('HealthPlanType', p, '', null, p === PLAN_TYPE_DEFAULT ? 4 : 0); });
+  PLAN_ROLE.forEach(function (p) { add('PlanRole', p); });
+  ACTING_AS.forEach(function (p) { add('ActingAs', p); });
+  EXT_REASONS.forEach(function (p, i) { add('ExtensionReason', p, i ? 'Cooling off period' : 'Extension approval'); });
+  DISPUTE_TYPES.forEach(function (p) { add('DisputeType', p); });
 
-  [['99283', 'EMERGENCY ROOM SERVICE', 1], ['99284', 'EMERGENCY ROOM SERVICE', 3], ['94761', 'MEASURE BLOOD OXYGEN LEVEL', 2],
-    ['12001', 'REPAIR- TRUNK/SCALP/NECK/AXIL/LIMBS <2.5', 1], ['A4670', 'AUTOMATIC BLOOD PRESSURE MONITOR', 2],
-    ['A6413', 'ADHESIVE BANDAGE, FIRST-AID', 2], ['A4930', 'GLOVES STERILE PER PAIR', 1], ['A4248', 'CHLORHEXIDINE ANTISEPT', 1],
-    ['82150', 'ASSAY OF AMYLASE', 1], ['81003', 'URINALYSIS, AUTO, W/O SCOPE', 1], ['81025', 'URINE PREGNANCY TEST', 2],
-    ['85025', 'COMPLETE CBC W/AUTO DIFF WBC', 1], ['80051', 'ELECTROLYTE PANEL', 1], ['82550', 'ASSAY OF CK (CPK)', 1],
-    ['82565', 'ASSAY OF CREATININE', 1], ['82947', 'ASSAY, GLUCOSE, BLOOD QUANT', 1], ['84520', 'ASSAY OF UREA NITROGEN', 1],
-    ['80076', 'HEPATIC FUNCTION PANEL', 1], ['10061', 'DRAINAGE OF SKIN ABSCESS', 1], ['J3490', 'PHARMACY', 1],
-    ['J0696', 'Injection, ceftriaxone sodium, per 250 mg', 1], ['96372', 'THERAPY/PROPHYLAXIS/DIAGNOSIS INJECTION, SC/IM', 1],
-    ['72125', 'CT NECK SPINE W/O DYE', 1], ['70450', 'CT HEAD/BRAIN W/O DYE', 1], ['72128', 'Computed tomography, thoracic spine', 1],
-    ['J1885', 'Injection, ketorolac tromethamine, per 15 mg', 1], ['A4215', 'NEEDLES ONLY STERILE ANY SIZE EACH', 1],
-    ['A4657', 'SYRINGE WITH OR WITHOUT NEEDLE EACH', 1], ['E1399', 'Durable medical equipment, miscellaneous', 1],
-    ['99281', 'EMERGENCY ROOM SERVICE', 0], ['99282', 'EMERGENCY ROOM SERVICE', 0], ['99285', 'EMERGENCY ROOM SERVICE', 0]
-  ].forEach(function (c) { add('ServiceCode', c[0], c[1], { description: c[1] }, c[2]); });
+  SEED_CODES.forEach(function (c) {
+    const o = OBSERVED_CODES[c];
+    add('ServiceCode', c, o ? o[0] : '', o ? { description: o[0] } : null, o ? o[1] : 0);
+  });
 
   add('PosCode', '23', 'Emergency room – hospital', null, 25);
   add('PosCode', '22', 'On campus-outpatient hospital');
@@ -1662,7 +2381,7 @@ function seedRows_() {
 
   ['25', '59', 'XU', '76', '77', 'LT', 'RT', 'GC'].forEach(function (m) { add('Modifier', m); });
 
-  ['Missing document', 'Wrong amount', 'Wrong payer details', 'Not eligible', 'Deadline passed', 'Other']
+  ['Missing document', 'Wrong amount', 'Wrong payer details', 'Not eligible', 'Deadline passed', 'Duplicate line item', 'Other']
     .forEach(function (r) { add('ReturnReason', r); });
 
   // US federal holidays as observed (OPM). Add next year's dates each December.
