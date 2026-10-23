@@ -2,7 +2,7 @@
  * Demo data for IDR Initiation Prep Studio.
  *
  * Add this file next to Code.gs (+ > Script, name it DemoData), then run from the editor:
- *   seedDemoData()      creates 11 synthetic disputes across the whole cycle
+ *   seedDemoData()      creates 12 synthetic disputes across the whole cycle
  *   demoUseUsView()     adds you to the US desk (copy desk view)
  *   demoUseLebanonView() removes you from the US desk (Lebanon entry view)
  *   clearDemoData()     deletes every demo dispute, its rows and its Drive folder
@@ -16,7 +16,8 @@
  * The demo covers each dispute kind: a single line item not bundled, a single bundled line item
  * with components, batched items, and a batch past the window that uses the cooling off period
  * extension. Open negotiation start dates are set so the window is open on the day you seed
- * (business day 31 to 34); seed again on a later day to keep it that way.
+ * (business day 31 to 34), except one dispute prepared ahead (day 25, not open yet); seed again on
+ * a later day to keep it that way.
  */
 
 const DEMO_PREFIX = 'IDR-DEMO-';
@@ -43,7 +44,8 @@ const DEMO_PLAN = [
   { stage: 'ready', type: 'batched', lines: 12, day: 31 },
   { stage: 'ready', type: 'batched', lines: 3, day: 40, cooling: true }, // past the window: cooling off period extension
   { stage: 'filed', type: 'batched', lines: 2, day: 33, idre: 'Accepted preferred' },
-  { stage: 'filed', type: 'single', lines: 1, day: 34, noticeLate: true, idre: 'Pending' } // notice sent the next day: shows the warning
+  { stage: 'filed', type: 'single', lines: 1, day: 34, noticeLate: true, idre: 'Pending' }, // notice sent the next day: shows the warning
+  { stage: 'ready', type: 'batched', lines: 2, day: 25 } // prepared ahead: on the US desk under "Not open yet"
 ];
 
 // ------------------------------------------------------------------ public functions

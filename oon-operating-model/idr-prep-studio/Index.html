@@ -298,7 +298,7 @@
 
     function busy(on) {
       document.getElementById('busybar').className = on ? 'on' : '';
-      app.querySelectorAll('button').forEach(function (b) { b.disabled = on; });
+      app.querySelectorAll('button').forEach(function (b) { b.disabled = on || b.hasAttribute('data-locked'); });
     }
 
     function fail(e) { busy(false); toast(e.message || String(e), true); }
@@ -682,10 +682,9 @@
       return { onEnds: utcToIso(onEnds), opens: utcToIso(opens), initiateBy: utcToIso(by), daysLeft: left, b: b,
         band: b < 31 ? 'early' : b <= 34 ? 'window' : 'late' };
     }
-    function timingProblem(d) {
-      var dl = bizDeadline(d.on_start_date);
+    function timingProblem(d, todayIso) {
+      var dl = bizDeadline(d.on_start_date, todayIso);
       if (!dl) return '';
-      if (dl.band === 'early') return rules().msg.onEarly + ' The first allowed initiation date is ' + usDate(dl.opens) + '.';
       if (dl.band === 'late' && !String(d.extension_reason || '').trim()) return 'Deadline passed: the initiation window was ' + usDate(dl.opens) + ' to ' + usDate(dl.initiateBy) + '.';
       return '';
     }
@@ -694,8 +693,8 @@
       if (!dl) return '';
       var win = esc(portalDate(dl.opens)) + ' to ' + esc(portalDate(dl.initiateBy));
       if (dl.band === 'early') {
-        return '<div class="deadline red">' + esc(rules().msg.onEarly) + ' Today is business day ' + dl.b + '. First allowed initiation date: <b>' +
-          esc(portalDate(dl.opens)) + '</b>. Initiation window: ' + win + '.</div>';
+        return '<div class="deadline">Filing window opens <b>' + esc(portalDate(dl.opens)) + '</b> (today is open negotiation business day ' + dl.b + '). ' +
+          'You can prepare it and send it to the US desk now; the US desk can file from ' + win + '.</div>';
       }
       if (dl.band === 'late') {
         var ext = rec && String(rec.extension_reason || '').trim();
@@ -1241,7 +1240,7 @@
 
     function dueCell(r) {
       if (!r.initiateBy) return '';
-      if (r.band === 'early') return '<span>Opens ' + esc(portalDate(r.opens)) + '</span><div class="muted">window to ' + esc(portalDate(r.initiateBy)) + '</div>';
+      if (r.band === 'early') return '<span><b>Not open yet</b></span><div class="muted">opens ' + esc(portalDate(r.opens)) + ', window to ' + esc(portalDate(r.initiateBy)) + '</div>';
       if (r.band === 'late') return '<span class="days-red">Window passed</span><div class="muted">' + (r.extension ? 'extension reason given' : 'needs an extension reason') + '</div>';
       return '<span class="' + (r.daysLeft <= 1 ? 'days-red' : '') + '">' + esc(portalDate(r.initiateBy)) + '</span><div class="muted">' +
         esc(r.daysLeft + ' business day' + (r.daysLeft === 1 ? '' : 's') + ' left') + '</div>';
@@ -1274,11 +1273,26 @@
       }).catch(fail);
     }
 
+    // On the US desk queue, disputes whose filing window has not opened yet are listed apart (not workable yet).
     function showRows(rows) {
       var box = app.querySelector('#rows');
       if (!box) return;
       if (!rows.length) { box.innerHTML = '<p class="muted">Nothing here.</p>'; return; }
-      box.innerHTML = '<div style="overflow-x:auto"><table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Type</th><th>Line items</th><th>Initiation</th><th>Team / owner</th><th>Last update</th></tr>' +
+      if (S.boot.isUsDesk && S.filter === 'Ready for US desk') {
+        var openNow = rows.filter(function (r) { return r.band !== 'early'; });
+        var later = rows.filter(function (r) { return r.band === 'early'; }).sort(function (a, b) { return a.opens < b.opens ? -1 : 1; });
+        box.innerHTML = (openNow.length ? rowsTable(openNow) : '<p class="muted">Nothing to file now.</p>') +
+          (later.length ? '<h3 style="margin-top:22px">Not open yet <span class="muted" style="font-weight:400">(filing window opens on the date shown; Start portal entry and Mark as filed wait until then)</span></h3>' + rowsTable(later) : '');
+      } else {
+        box.innerHTML = rowsTable(rows);
+      }
+      box.querySelectorAll('tr[data-id]').forEach(function (tr) {
+        tr.addEventListener('click', function () { open(tr.getAttribute('data-id')); });
+      });
+    }
+
+    function rowsTable(rows) {
+      return '<div style="overflow-x:auto"><table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Type</th><th>Line items</th><th>Initiation</th><th>Team / owner</th><th>Last update</th></tr>' +
         rows.map(function (r) {
           return '<tr class="click" data-id="' + esc(r.id) + '"><td><b>' + esc(r.id) + '</b>' + (r.portalNumber ? '<div class="muted">' + esc(r.portalNumber) + '</div>' : '') + '</td><td>' + badge(r.status) +
             (r.idreStatus ? '<div class="muted" style="margin-top:4px">IDRE: ' + esc(r.idreStatus) + '</div>' : '') +
@@ -1286,9 +1300,6 @@
             '</td><td>' + esc(r.kind) + '</td><td>' + esc(r.lines) + '</td><td>' + dueCell(r) + '</td><td>' + esc([r.team, r.owner].filter(String).join(' / ')) +
             '</td><td>' + esc(r.updatedAt) + '<div class="muted">' + esc(r.updatedBy) + '</div></td></tr>';
         }).join('') + '</table></div>';
-      box.querySelectorAll('tr[data-id]').forEach(function (tr) {
-        tr.addEventListener('click', function () { open(tr.getAttribute('data-id')); });
-      });
     }
 
     // ---------------------------------------------------------------- editor (offshore entry)
@@ -1880,6 +1891,9 @@
       var dl = S.deadline;
       var ctx = ctxFor(S.d);
       var gw = S.boot.gateway;
+      // Before business day 31 the portal refuses the dispute: the US desk waits for the window.
+      var notOpen = !!(dl && dl.band === 'early' && S.d.Status !== 'Filed');
+      var lockAttr = notOpen ? ' disabled data-locked title="Filing window opens ' + esc(portalDate(dl.opens)) + '"' : '';
       var h = '<div class="desk-head"><div><button class="link" id="exit">← All disputes</button><h1>' + esc(S.id) + ' ' + badge(S.d.Status) + '</h1>' +
         '<p class="sub">Copy each value into the portal from top to bottom. The sections follow the portal\'s pages.</p>' +
         (dl && S.d.Status !== 'Filed' ? '<div>' + deadlineText(S.d.on_start_date, S.d) + '</div>' : '') + '</div>' +
@@ -1892,11 +1906,15 @@
           '. Every US desk user needs an IDR Gateway account joined to our organization.</div>';
       }
       h += warnBox(S.warnings, 'Noted by the app (not blocking):');
+      if (notOpen) {
+        h += '<div class="problems"><b>Not open yet.</b> Filing window opens ' + esc(portalDate(dl.opens)) + ' (open negotiation business day 31). ' +
+          'Start portal entry and Mark as filed are available from then until ' + esc(portalDate(dl.initiateBy)) + '. You can still review it or return it to Lebanon.</div><br>';
+      }
       if (S.d.Status !== 'Filed') {
         h += '<div class="card page-card"><div class="session"><div><b>Start only when you can finish this dispute in one sitting.</b>' +
           '<div class="muted">The portal times out after 60 minutes of inactivity and saves nothing when you leave it.</div></div>' +
           '<div style="display:flex;gap:10px;align-items:center"><span id="timer" class="timer">' + (S.timer ? '' : '60:00') + '</span>' +
-          '<button class="primary" id="start-timer">' + (S.timer ? 'Restart timer' : 'Start portal entry') + '</button></div></div></div>';
+          '<button class="primary" id="start-timer"' + lockAttr + '>' + (S.timer ? 'Restart timer' : 'Start portal entry') + '</button></div></div></div>';
       }
 
       sc.pages.forEach(function (p) {
@@ -1946,7 +1964,7 @@
           '<div class="lbl" style="font-size:13px;font-weight:600"><span class="req">*</span> Copy of the notice sent to the non-initiating party on</div><input type="date" id="nip-date" value="' + esc(today()) + '" max="' + esc(today()) + '">' +
           '<div class="lbl" style="font-size:13px;font-weight:600"><span class="req">*</span> Sent by</div><select id="nip-method"><option value="">Select</option>' +
           rules().nipMethods.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select>' +
-          '<div><button class="success" id="filed">Mark as filed</button></div></div>' +
+          '<div><button class="success" id="filed"' + lockAttr + '>Mark as filed</button></div></div>' +
           '<div><b>Something is wrong</b>' +
           '<input type="text" id="reason" list="dl_return" placeholder="Reason" autocomplete="off"><datalist id="dl_return">' +
           entries('ReturnReason').map(function (o) { return '<option value="' + esc(o.v) + '"></option>'; }).join('') + '</datalist>' +
