@@ -23,22 +23,38 @@
     <h1>Notice of IDR Initiation: Summary of Qualified Items and/or Services</h1>
     <div><?= data.appName ?> · Dispute <?= data.id ?></div>
   </div>
-  <div class="internal">Internal preparation record. This is not a CMS submission and was not sent to the federal IDR portal.</div>
+  <div class="internal">Internal preparation record. This is not a CMS submission and was not sent to the federal IDR portal (IDR Gateway).</div>
 
-  <h2>Dispute</h2>
+  <h2>Introduction &amp; Qualification Questions</h2>
   <table class="meta">
-    <tr><td>Health Insurance Plan or Company</td><td><?= d.plan_name ?></td></tr>
-    <tr><td>Plan is a(n)</td><td><?= d.plan_role ?></td></tr>
-    <tr><td>Health Plan Type</td><td><?= d.q_plan_type ?></td></tr>
-    <tr><td>Provider or facility</td><td><?= d.prov_name ?><?= d.prov_group_name ? ' (' + d.prov_group_name + ')' : '' ?></td></tr>
-    <tr><td>Health Care Designation</td><td><?= d.prov_designation ?></td></tr>
-    <tr><td>Tax ID / NPI</td><td><?= d.tin ?> / <?= d.npi ?></td></tr>
-    <tr><td>What are you disputing today?</td><td><?= d.dispute_kind ?></td></tr>
+    <tr><td>Service provided prior to 1/1/2022?</td><td><?= d.q_prior_2022 ?></td></tr>
+    <tr><td>I am (or I am acting on behalf of) a</td><td><?= d.q_acting_as ?></td></tr>
+    <tr><td>Tax ID / NPI</td><td><?= d.tin || '-' ?> / <?= d.npi || '-' ?></td></tr>
+    <tr><td>Health Plan Type</td><td><?= d.q_plan_type ?><?= d.fehb_enrollment_code ? ' (Enrollment Code ' + d.fehb_enrollment_code + ')' : '' ?></td></tr>
     <tr><td>Open negotiation start date</td><td><?= fmt_(d.on_start_date, 'date') ?></td></tr>
     <? if (data.deadline) { ?>
-    <tr><td>Open negotiation ends / initiate by</td><td><?= fmt_(data.deadline.onEnds, 'date') ?> / <?= fmt_(data.deadline.initiateBy, 'date') ?></td></tr>
+    <tr><td>Initiation window (business days 31 to 34)</td><td><?= fmt_(data.deadline.opens, 'date') ?> to <?= fmt_(data.deadline.initiateBy, 'date') ?></td></tr>
+    <? } ?>
+    <? if (d.extension_reason) { ?>
+    <tr><td>Extension justification reason</td><td><?= d.extension_reason ?><?= d.cooling_dispute_ref ? ' (' + d.cooling_dispute_ref + ')' : '' ?></td></tr>
     <? } ?>
     <tr><td>Consent to waive protections</td><td><?= d.consent_waiver ?></td></tr>
+  </table>
+
+  <h2>Dispute Type</h2>
+  <table class="meta">
+    <tr><td>What are you disputing today?</td><td><?= d.dispute_type ?><?= d.bundled_payment ? ' (bundled payment arrangement: ' + d.bundled_payment + ')' : '' ?></td></tr>
+    <tr><td>Line item layout</td><td><?= d.dispute_kind ?></td></tr>
+  </table>
+
+  <h2>Contact Information</h2>
+  <table class="meta">
+    <tr><td>Initiating party</td><td><?= d.prov_name ?><?= d.prov_group_name ? ' (' + d.prov_group_name + ')' : '' ?></td></tr>
+    <tr><td>Address</td><td><?= [d.prov_addr1, d.prov_addr2, d.prov_city, d.prov_state, d.prov_zip].filter(String).join(', ') ?></td></tr>
+    <tr><td>Email / phone</td><td><?= d.prov_email ?> / <?= d.prov_phone ?></td></tr>
+    <tr><td>Non-initiating party</td><td><?= d.plan_name ?> (<?= d.plan_role ?>)</td></tr>
+    <tr><td>Address</td><td><?= [d.plan_addr1, d.plan_addr2, d.plan_city, d.plan_state, d.plan_zip].filter(String).join(', ') ?></td></tr>
+    <tr><td>Email / phone</td><td><?= d.plan_email ?> / <?= d.plan_phone ?></td></tr>
     <tr><td>Team / owner</td><td><?= [d.Team, d.Owner].filter(String).join(' / ') ?></td></tr>
   </table>
 
@@ -56,10 +72,12 @@
     <? }); ?>
   </table>
 
-  <table class="meta" style="margin-top:12px">
-    <tr><td>Certified IDR entity legal business name</td><td><?= d.idr_entity ?></td></tr>
-    <tr><td>Third Party Attestation</td><td><?= d.third_party_attest ?></td></tr>
-    <tr><td>Signature</td><td><?= d.prov_name ?> (signed and dated by the US desk in the portal)</td></tr>
+  <h2>Preferred Certified IDR Entity &amp; Conflict of Interest</h2>
+  <table class="meta">
+    <tr><td>IDRE legal business name</td><td><?= d.idr_entity ?></td></tr>
+    <tr><td>Third-party administrator or other service provider initiating?</td><td><?= d.third_party_attest ?></td></tr>
+    <tr><td>Conflict of interest attestation</td><td><?= d.coi_attest === 'Yes' ? 'Ticked' : 'Not ticked' ?></td></tr>
+    <tr><td>Initiating party</td><td><?= d.prov_name ?> (the portal fills it and the date when the US desk submits)</td></tr>
   </table>
 
   <? if (data.warnings && data.warnings.length) { ?>
@@ -72,7 +90,7 @@
   <h2>Documents in the dispute folder</h2>
   <ul class="files">
     <? data.files.filter(function (f) { return f.Category !== 'confirmation_pdf'; }).forEach(function (f) { ?>
-      <li><?= f.Category === 'qpa' ? 'Line ' + f.LineNo + ' QPA documentation' : f.Category === 'on_evidence' ? 'Open negotiation evidence' : 'Additional supporting documentation' ?>: <?= f.Name ?></li>
+      <li><?= f.Category === 'qpa' ? 'Line ' + f.LineNo + ' QPA documentation' : ({ on_evidence: 'Open negotiation evidence', extension: 'Extension approval', cooling: 'Cooling off payment determination', additional: 'Additional supporting documentation', portal_confirmation: 'Notice of IDR Initiation (portal)' })[f.Category] || f.Category ?>: <?= f.Name ?></li>
     <? }); ?>
   </ul>
 

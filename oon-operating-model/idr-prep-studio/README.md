@@ -36,7 +36,7 @@ The app learns as it is used. Every dropdown list lives in the **Options** tab a
 | 4 | Non-initiating party contact | Insurance provider type (from the plan type), Health Insurance Plan or Company (payer address book), email, phone, fax, address; points of contact (collapsed) |
 | 5 | Dispute Line Items | The portal's summary table as a grid, with Edit, Duplicate, Delete, Add line item, and Paste lines from a spreadsheet |
 | 6 | Preferred Certified IDR Entity & Conflict of Interest | IDRE legal business name, the third-party question, the conflict of interest attestation, additional documents; initiating party and date shown as filled by the portal |
-| 7 | Review & Submit | Every page with its status and an Edit link, the summary table, warnings, and **Save & create confirmation PDF** (sends it to the US desk) |
+| 7 | Review & Submit | Every page with its status and an Edit link, the summary table, warnings, and **Save & create confirmation PDF** (sends it to the US desk, also before the filing window opens) |
 
 Then the **US desk** copies it into the portal and marks it filed.
 
@@ -56,7 +56,7 @@ Then the **US desk** copies it into the portal and marks it filed.
 - **Health Plan Type** is a strict list of the portal's 7 options, in the portal's order: Individual health insurance issuer; Fully-insured ERISA group health plan; Federal Employees Health Benefits (FEHB) carrier; Either partially or fully self-insured ERISA group health plan; Church plan; Non-federal governmental plan (e.g., state or local government plan); No Plan/Issuer Response. New values are not learned, but use counts still set the default (seeded: "Either partially or fully self-insured ERISA group health plan"). A note under it says that Medicare, Medicaid, CHIP, TRICARE or health care sharing ministry coverage is not eligible.
 - **FEHB carrier**: the 3-digit enrollment code shows and is required.
 - **Open negotiation timing.** The portal counts business days with the open negotiation start date itself as **business day 1** (weekends and the Holiday list are skipped; a start date that is not a business day does not count). Let b be the business days from the start date to today:
-  - **b < 31: blocked.** "If the parties can't agree on an out-of-network rate, the 30-business-day open negotiation period must elapse before starting the Federal IDR process." The helper shows the first allowed initiation date.
+  - **b < 31: not open yet (prepare ahead).** Lebanon can finish the dispute and send it to the US desk. The helper and the dispute show a notice, "Filing window opens <date>", that does not block. The portal refuses a filing before day 31 ("...the 30-business-day open negotiation period must elapse before starting the Federal IDR process."), so the US desk cannot start portal entry or mark it filed until the window opens.
   - **31 to 34: initiation window.** The helper shows "Initiation window: first day to last day (n business days left)".
   - **b > 34: extension reason required.** Pick one of the portal's two reasons:
     - "I received an extension approval from the Federal IDR mailbox..." → upload the extension approval.
@@ -122,7 +122,7 @@ Improperly batched or bundled resubmissions use the portal's separate **"Notice 
 
 ## US desk steps
 
-1. Open a dispute under **Ready for US desk**. It opens in the copy desk.
+1. Open a dispute under **Ready for US desk**. It opens in the copy desk. Disputes prepared ahead are listed apart under **Not open yet**, with the date their filing window opens. For those, **Start portal entry** and **Mark as filed** stay locked until that date (the server refuses the filing too). You can still review them or return them.
 2. Read the **IDR Gateway** banner. Sign in to the IDR Gateway (from Nov 13, 2026), then choose **Disputes → Start a Dispute**.
 3. The portal form must be **finished in one session**. It times out after 60 minutes of inactivity and saves nothing when you leave it. Start only when you can finish this dispute in one sitting. Click **Start portal entry** to start the 60-minute timer; it warns you at 50 minutes.
 4. Copy each value, top to bottom. The sections follow the portal's pages:
@@ -292,7 +292,7 @@ Add `DemoData.gs` as a second script file (**+ → Script**, name it **DemoData*
 
 | Function | What it does |
 | --- | --- |
-| `seedDemoData` | Creates 11 synthetic disputes, `IDR-DEMO-001` to `IDR-DEMO-011`, with synthetic documents in Drive. Running it again replaces them. |
+| `seedDemoData` | Creates 12 synthetic disputes, `IDR-DEMO-001` to `IDR-DEMO-012`, with synthetic documents in Drive. Running it again replaces them. |
 | `demoUseLebanonView` / `demoUseUsView` | Switch your account between the Lebanon entry screens and the US copy desk |
 | `clearDemoData` | Deletes every `IDR-DEMO-` dispute, its rows and its Drive folder |
 
@@ -300,7 +300,7 @@ The demo data is all synthetic:
 - Claim numbers start with `DEMO` and use letters and digits only, as the portal requires.
 - Amounts, dates of service, people, portal dispute numbers and documents are made up.
 - The payers, billing entities, IDR entities and service codes come from the seed lists.
-- The open negotiation start dates are set so the window is open **on the day you seed**. Seed again on a later day to refresh them.
+- The open negotiation start dates are set so the window is open **on the day you seed** (012 is prepared ahead, on business day 25). Seed again on a later day to refresh them.
 
 | Dispute | Stage | Shows |
 | --- | --- | --- |
@@ -315,6 +315,7 @@ The demo data is all synthetic:
 | 009 | Ready | **Cooling off period extension**: business day 40, dispute reference and determination uploaded; dates of service more than 30 business days apart (allowed) |
 | 010 | Filed | Notice sent the same day; IDR entity accepted |
 | 011 | Filed | Single line item; notice sent the day after filing (shows the warning in Insights) |
+| 012 | Ready | **Prepared ahead** (business day 25): on the US desk under "Not open yet", with Start portal entry and Mark as filed locked |
 
 ## Access and data
 
@@ -338,7 +339,7 @@ The demo data is all synthetic:
 
 - **Open question:** is TX on CMS's Complex State list? If it is, set `ComplexStates` to `TX`, and every line will ask for the state-specific attestation.
 - **Open question:** what should a facility enter as "Hospital, Health Care Facility or Group Name"? It is now required, and the notices left it blank for Silver Alliance. The demo uses the facility's own name.
-- **Blocked before day 31.** Lebanon can save drafts at any time, but a dispute can only go to the US desk inside the window (or with an extension reason). This matches the portal.
+- **Prepared ahead.** A dispute can go to the US desk before day 31, but it can only be filed from day 31. After day 34 it needs an extension reason to go to the US desk at all.
 - **Alert texts.** The guide shows the portal's alerts for "prior to 1/1/2022" and "consent to waive" only as pictures. The Studio uses its own wording.
 - **Batches with several start dates.** The open negotiation start date is entered once per dispute, as in the portal. The Studio cannot check that a notice was uploaded for each distinct start date.
 - **Files.** Each file must be under 45 MB (Apps Script).
