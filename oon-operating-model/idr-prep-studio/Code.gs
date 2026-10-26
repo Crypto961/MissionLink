@@ -3251,12 +3251,28 @@ function applySeedAliases_() {
 
 /** Adds the seed billing entities that are missing (name or alias, ignoring case and punctuation). Returns how many. */
 function seedEntities_() {
-  const have = {};
-  readTab_(TABS.entities).forEach(function (r) {
-    have[optionKey_(r.Name)] = true;
-    splitAliases_(r.Aliases).forEach(function (a) { have[optionKey_(a)] = true; });
+  const rows = readTab_(TABS.entities);
+  const at = {};
+  rows.forEach(function (r, i) {
+    at[optionKey_(r.Name)] = i;
+    splitAliases_(r.Aliases).forEach(function (a) { at[optionKey_(a)] = i; });
   });
-  const add = seedEntityRows_().filter(function (r) { return !have[optionKey_(r.Name)]; });
+  const add = [], fix = {};
+  seedEntityRows_().forEach(function (seed) {
+    const i = at[optionKey_(seed.Name)];
+    if (i === undefined) { add.push(seed); return; }
+    // Existing row: fill blank profile columns; an unconfirmed acting-as guess gives way to the business's value.
+    const r = rows[i], rec = Object.assign({}, r);
+    let changed = false;
+    ENTITY_PROFILE_COLS.forEach(function (c) {
+      const blank = String(r[c] == null ? '' : r[c]).trim() === '';
+      const guess = c === 'ActingAs' && !yes_(r.Confirmed);
+      if ((blank || guess) && seed[c] && String(r[c]) !== String(seed[c])) { rec[c] = seed[c]; changed = true; }
+    });
+    if (!yes_(r.Confirmed) && rec.ActingAs === seed.ActingAs) { rec.Confirmed = 'Yes'; changed = true; }
+    if (changed) fix[i + 2] = rec;
+  });
+  if (Object.keys(fix).length) writeRows_(TABS.entities, table_(TABS.entities).header, fix);
   appendRecords_(TABS.entities, add);
   return add.length;
 }
@@ -3339,12 +3355,6 @@ const US_STATES = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', '
   'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA',
   'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'AS', 'GU', 'MP', 'PR', 'VI'];
 
-// Our billing entities, exact legal spelling (not corrected; see the README for names to confirm).
-const SEED_ENTITIES = ['Jade Medical, PLLC', 'Deerfield plains, LLC', 'CareMed, PLLC', 'Sycamore Rush, LLC', 'WRFER University, LLC',
-  'Windview First, PLLC', 'Capital Health, PLLC', 'Silver Alliance, LLC', 'Trans Oakley, LLC', 'Eastern Elm, PLLC', 'Lakewood Green, LLC',
-  'Silver choice, PLLC', 'Greenwood South, LLC', 'Aspen Willow, PLLC', 'RSER Benbrook, LLC', 'TotalCare ER Benbrook, PLLC',
-  'Cedar Physcians, PLLC', 'WFRER Denton, LLC', 'Sun Choice, PLLC', 'WFRER Cooper, LLC', 'Greenview Physicians, PLLC',
-  'Hillside Alliance, LLC', 'Everwell Medical, PLLC', 'Gracious Health, LLC'];
 
 // Non-initiating parties (plans, issuers, TPAs), as given by the business.
 const SEED_PAYERS = [
@@ -3461,20 +3471,45 @@ function seedRows_() {
   return rows;
 }
 
-/** BillingEntities seed rows. Profiles seen on the notices; the others are learned on their first save. */
+// Billing entity profiles as given by the business: name, acting-as Key, TIN, NPI, Totalcare ER site, negotiations email.
+// Every entity uses the central mailing address and phone below.
+const SEED_ENTITY_PROFILES = [
+  ['Jade Medical, PLLC', 'provider', '861369053', '1528649423', 'Weatherford', 'weatherford.negotiations@totalcare.us'],
+  ['Deerfield plains, LLC', 'facility', '861485633', '1275110108', 'Weatherford', 'weatherford.negotiations@totalcare.us'],
+  ['CareMed, PLLC', 'provider', '872554067', '1790457141', 'Desoto', 'Desoto.negotiations@totalcare.us'],
+  ['Sycamore Rush, LLC', 'facility', '862982502', '1053081315', 'Desoto', 'Desoto.negotiations@totalcare.us'],
+  ['WRFER University, LLC', 'facility', '854042853', '1124603386', 'West7th', 'West7.negotiations@totalcare.us'],
+  ['Windview First, PLLC', 'provider', '862137296', '1386222180', 'West7th', 'West7.negotiations@totalcare.us'],
+  ['Capital Health, PLLC', 'provider', '872524265', '1609548056', 'Cedar Hill', 'cedarhill.negotiations@totalcare.us'],
+  ['Silver Alliance, LLC', 'facility', '862923814', '1972273233', 'Cedar Hill', 'cedarhill.negotiations@totalcare.us'],
+  ['Trans Oakley, LLC', 'facility', '863009016', '1417615006', 'Garland', 'Garland.negotiations@totalcare.us'],
+  ['Eastern Elm, PLLC', 'provider', '882459039', '1639808538', 'Garland', 'Garland.negotiations@totalcare.us'],
+  ['Lakewood Green, LLC', 'facility', '862955254', '1013675834', 'Frisco', 'Frisco.negotiations@totalcare.us'],
+  ['Silver choice, PLLC', 'provider', '862183756', '1912640491', 'Frisco', 'Frisco.negotiations@totalcare.us'],
+  ['Greenwood South, LLC', 'facility', '861810636', '1063179174', 'Matlock', 'Matlock.negotiations@totalcare.us'],
+  ['Aspen Willow, PLLC', 'provider', '882426528', '1669101663', 'Matlock', 'Matlock.negotiations@totalcare.us'],
+  ['RSER Benbrook, LLC', 'facility', '371844873', '1194243287', 'Benbrook', 'Benbrook.negotiations@totalcare.us'],
+  ['TotalCare ER Benbrook, PLLC', 'provider', '822577758', '1437678430', 'Benbrook', 'Benbrook.negotiations@totalcare.us'],
+  ['Cedar Physcians, PLLC', 'provider', '854341538', '1295322865', 'Denton', 'Denton.negotiations@totalcare.us'],
+  ['WFRER Denton, LLC', 'facility', '853064376', '1619563277', 'Denton', 'Denton.negotiations@totalcare.us'],
+  ['Sun Choice, PLLC', 'provider', '862117436', '1518545318', 'Cooper', 'Cooper.negotiations@totalcare.us'],
+  ['WFRER Cooper, LLC', 'facility', '854000249', '1386229532', 'Cooper', 'Cooper.negotiations@totalcare.us'],
+  ['Greenview Physicians, PLLC', 'provider', '333509145', '1992503643', 'Carrollton', 'Carrollton.negotiations@karisbilling.us'],
+  ['Hillside Alliance, LLC', 'facility', '333533556', '1578361325', 'Carrollton', 'Carrollton.negotiations@karisbilling.us'],
+  ['Everwell Medical, PLLC', 'provider', '392402475', '1457228496', 'Sachse', 'Sachse.negotiations@karisbilling.us'],
+  ['Gracious Health, LLC', 'facility', '392489677', '1649146580', 'Sachse', 'Sachse.negotiations@karisbilling.us']
+];
+const SEED_ENTITY_CONTACT = { Addr1: '6049 S. Hulen St.', Addr2: '', City: 'Fort Worth', State: 'TX', ZIP: '76132', Phone: '(817) 566-1232', Fax: '' };
+// Profile columns setup() fills on existing rows when they are still blank.
+const ENTITY_PROFILE_COLS = ['ActingAs', 'TIN', 'NPI', 'GroupName', 'Addr1', 'Addr2', 'City', 'State', 'ZIP', 'Email', 'Phone', 'Fax'];
+
+/** BillingEntities seed rows: the full profile of each of our entities. */
 function seedEntityRows_() {
-  const totalcare = { Addr1: '6049 S. Hulen St.', City: 'Fort Worth', State: 'TX', ZIP: '76132', Email: 'cedarhill.negotiations@totalcare.us',
-    Phone: '(817) 566-1232' };
-  const profiles = {
-    'Silver Alliance, LLC': Object.assign({ ActingAs: builtin_('ActingAs', 'facility'), TIN: '862923814', NPI: '1972273233', Confirmed: 'Yes', Count: 3 }, totalcare),
-    'Capital Health, PLLC': Object.assign({ ActingAs: builtin_('ActingAs', 'provider'), TIN: '872524265', NPI: '1609548056', GroupName: 'Totalcare ER, Cedar Hill',
-      Confirmed: 'Yes', Count: 1 }, totalcare)
-  };
+  const counts = { 'Silver Alliance, LLC': 3, 'Capital Health, PLLC': 1 }; // seen on the sample notices
   const aliases = { 'Silver Alliance, LLC': 'SILVER ALLIANCE LLC; SILVER ALLIANCE,LLC', 'Capital Health, PLLC': 'CAPITAL HEALTH PLLC' };
-  return SEED_ENTITIES.map(function (name) {
-    // First guess from the legal form: PLLC = provider, LLC = facility. A saved dispute confirms it.
-    const guess = /\bPLLC\s*$/i.test(name) ? builtin_('ActingAs', 'provider') : builtin_('ActingAs', 'facility');
-    return Object.assign({ Name: name, ActingAs: guess, Confirmed: 'No', Status: ACTIVE, Count: 0, LastUsed: '', AddedBy: 'setup', AddedAt: nowStr_(),
-      Aliases: aliases[name] || '' }, profiles[name] || {});
+  return SEED_ENTITY_PROFILES.map(function (p) {
+    return Object.assign({ Name: p[0], ActingAs: builtin_('ActingAs', p[1]), TIN: p[2], NPI: p[3], GroupName: 'Totalcare ER, ' + p[4],
+      Email: p[5] }, SEED_ENTITY_CONTACT, { Confirmed: 'Yes', Status: ACTIVE, Count: counts[p[0]] || 0, LastUsed: '', AddedBy: 'setup',
+      AddedAt: nowStr_(), Notes: '', Aliases: aliases[p[0]] || '' });
   });
 }

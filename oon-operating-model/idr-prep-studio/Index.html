@@ -95,6 +95,7 @@
     .steps button { background: #E6EEF3; color: var(--text-2); font-size: 12px; padding: 8px 6px; border-radius: 8px; }
     .steps button.on { background: var(--primary-cyan); color: var(--white); }
     .steps button.done { background: var(--navy-tint, #D7E4EC); color: var(--primary-navy); }
+    .steps button.locked { opacity: .55; cursor: not-allowed; }
     .mirror { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--primary-cyan); margin-bottom: 4px; }
     .req-note { font-size: 13px; color: var(--text-2); margin: 0 0 14px; }
     .req { color: var(--functional-red); font-weight: 700; }
@@ -1221,6 +1222,29 @@
       return all;
     }
 
+    // Moving forward is allowed only when every page before the target is complete and no line item is left unsaved.
+    // Returns null when the move is allowed, else { page, message }. Back and read-only disputes are never blocked.
+    function forwardBlock(target) {
+      if (target <= S.page || !editable()) return null;
+      if (S.page === 4 && (S.line !== null || S.paste !== null)) {
+        return { page: 4, message: S.line !== null ? 'Save the open line item (Save line item) or Cancel it before you continue.' :
+          'Add the pasted lines or cancel the paste before you continue.' };
+      }
+      for (var k = 0; k < target; k++) {
+        var list = pageIssues(k);
+        if (list.length) return { page: k, message: 'Page ' + (k + 1) + ' has ' + list.length + ' issue(s) to fix: ' + list[0] };
+      }
+      return null;
+    }
+
+    // Shows why a forward move was refused and opens the page that needs fixing.
+    function refuseForward(block) {
+      S.blocked = block.page === 4 ? (S.line !== null || S.paste !== null ? [block.message] : linesIssues()) : null;
+      if (block.page !== S.page) { S.page = block.page; S.line = null; S.paste = null; }
+      render();
+      toast(block.message, true);
+    }
+
     // ---------------------------------------------------------------- file uploads
 
     function readAsBase64(file) {
@@ -1436,7 +1460,9 @@
           var n = pageIssues(i).length;
           st = n ? '<span class="st bad">' + n + ' to fix</span>' : '<span class="st ok">✓</span>';
         }
-        return '<button data-step="' + i + '" class="' + (i === S.page ? 'on' : (i < S.page ? 'done' : '')) + '"' + (!S.id && i > 0 ? ' disabled' : '') + '>' +
+        var locked = S.id && i > S.page && editable() && forwardBlock(i);
+        return '<button data-step="' + i + '" class="' + (i === S.page ? 'on' : (i < S.page ? 'done' : '')) + (locked ? ' locked' : '') + '"' +
+          (!S.id && i > 0 ? ' disabled' : '') + (locked ? ' title="Finish the earlier pages first"' : '') + '>' +
           (i + 1) + ' · ' + esc(page.short) + st + '</button>';
       }).join('') + '</div>';
     }
@@ -1461,10 +1487,15 @@
       var exit2 = app.querySelector('#exit2');
       if (exit2) exit2.addEventListener('click', function () { S.view = 'list'; render(); });
       app.querySelectorAll('[data-step]').forEach(function (b) {
-        b.addEventListener('click', function () { S.page = Number(b.getAttribute('data-step')); S.line = null; S.paste = null; render(); });
+        b.addEventListener('click', function () {
+          var target = Number(b.getAttribute('data-step'));
+          var block = forwardBlock(target);
+          if (block) { refuseForward(block); return; }
+          S.page = target; S.line = null; S.paste = null; S.blocked = null; render();
+        });
       });
       var back = app.querySelector('#back');
-      if (back) back.addEventListener('click', function () { S.page--; S.line = null; S.paste = null; render(); });
+      if (back) back.addEventListener('click', function () { S.page--; S.line = null; S.paste = null; S.blocked = null; render(); });
     }
 
     function renderEditor() {
@@ -1612,7 +1643,10 @@
       var inner = '<div class="kind-note"><b>' + esc(S.d.dispute_kind || 'Dispute type not set') + '.</b> ' + esc(kindNote()) + '</div>';
       inner += '<h3>Summary of Qualified Items and/or Services</h3>' + linesGrid();
       var rulesNow = lineRules(S.d, S.lines).concat(repeatsWithin(S.lines));
-      if (S.lines.length) inner += problemBox(rulesNow, 'Line item rules to fix:');
+      // Once the line form is closed, the list of things to fix stays live until it is empty.
+      if (S.blocked && S.line === null && S.paste === null) S.blocked = linesIssues().length ? linesIssues() : null;
+      if (S.blocked && S.blocked.length) inner += problemBox(S.blocked, 'Fix these before you continue:');
+      else if (S.lines.length) inner += problemBox(rulesNow, 'Line item rules to fix:');
       inner += warnBox(S.warnings);
       if (S.line === null && S.paste === null) {
         inner += '<p class="row-actions" style="margin-top:14px">' + (canAddLine() ? '<button class="secondary" id="add">+ Add line item</button>' +
@@ -1645,7 +1679,11 @@
       });
       if (card.querySelector('#add')) card.querySelector('#add').addEventListener('click', function () { S.line = newLine(); render(); scrollToForm(); });
       if (card.querySelector('#paste')) card.querySelector('#paste').addEventListener('click', function () { S.paste = { text: '', rows: null }; render(); scrollToForm(); });
-      app.querySelector('#cont').addEventListener('click', function () { S.page = 5; S.line = null; S.paste = null; render(); });
+      app.querySelector('#cont').addEventListener('click', function () {
+        var block = forwardBlock(5);
+        if (block) { refuseForward(block); return; }
+        S.page = 5; S.line = null; S.paste = null; S.blocked = null; render();
+      });
       if (S.paste !== null) wirePaste(card);
       if (S.line !== null) wireLineForm(card);
     }
