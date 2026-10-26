@@ -226,6 +226,17 @@
     .timer { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
     .timer.warn { color: #8A5A00; }
     .timer.over { color: var(--functional-red); }
+    .search-box { position: relative; }
+    .dropdown { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; background: var(--white); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 20px rgba(0, 59, 92, 0.12); max-height: 260px; overflow-y: auto; }
+    .dd-item { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 0; padding: 8px 10px; font-weight: 500; font-size: 13px; color: var(--primary-navy); }
+    .dd-item:hover { background: var(--cyan-tint); }
+    .dd-new { color: #006D96; font-weight: 700; border-top: 1px solid var(--line); }
+    .dd-note { padding: 8px 10px; font-size: 12px; color: var(--text-2); }
+    .admin-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+    .admin-tabs button { background: var(--white); border: 1px solid var(--line); color: var(--text-2); padding: 7px 12px; font-size: 13px; }
+    .admin-tabs button.on { background: var(--primary-navy); color: var(--white); border-color: var(--primary-navy); }
+    table.grid select { padding: 5px 6px; border: 1px solid #C5D0DA; border-radius: 6px; font: inherit; font-size: 12px; }
+    table.grid.edit input[type=text] { min-width: 90px; font-size: 12px; padding: 5px 6px; }
     .finish select, .finish input[type=date] { width: 100%; padding: 9px 10px; border: 1px solid #C5D0DA; border-radius: 8px; font: inherit; margin: 6px 0 10px; }
 
     @media (max-width: 760px) {
@@ -356,28 +367,47 @@
       if (f.type === 'date') return portalDate(v);
       if (f.type === 'money') return money(v);
       if (f.type === 'phone') return normPhone(v);
-      if (f.type === 'fixed') return f.value;
+      if (isFixed(f)) return String(f.default);
       return String(v == null ? '' : v);
+    }
+
+    // A locked field with a Fixed default always holds that default (same rule as isFixed_).
+    function isFixed(f) {
+      return !!f.locked && f.defaultMode === 'Fixed' && f.default != null && String(f.default) !== '' && !/^@/.test(f.default);
+    }
+
+    // ---------------------------------------------------------------- options by Key (same as optValue_ / optKeyOf_)
+    // The logic refers to an option's stable Key, so an admin can reword it on the Options tab.
+
+    function optValue(list, key) {
+      var e = entries(list).filter(function (o) { return o.k === key; })[0];
+      return e ? e.v : '';
+    }
+    function keyOf(list, value) {
+      var v = String(value == null ? '' : value).trim();
+      if (!v) return '';
+      var e = entries(list).filter(function (o) { return o.v === v; })[0];
+      return e && e.k ? e.k : '';
     }
 
     // ---------------------------------------------------------------- derived values (same as the server)
 
     function disputeKind(type, bundled) {
-      var t = rules().disputeTypes;
-      if (type === t[1]) return kinds().batched;
-      if (type === t[0]) return bundled === 'Yes' ? kinds().bundled : kinds().single;
+      var t = keyOf('DisputeType', type);
+      if (t === 'batched') return kinds().batched;
+      if (t === 'single') return keyOf('BundledPayment', bundled) === 'yes' ? kinds().bundled : kinds().single;
       return '';
     }
     function planRoleFor(planType) {
-      var p = rules().planTypes, r = rules().planRoles;
+      var k = keyOf('HealthPlanType', planType);
       if (!planType) return '';
-      if (planType === p[0]) return r[1];
-      if (planType === p[2]) return r[2];
-      return r[0];
+      if (k === 'individual') return optValue('PlanRole', 'individual');
+      if (k === 'fehb') return optValue('PlanRole', 'fehb');
+      return optValue('PlanRole', 'group');
     }
     function lineTypeFor(kind, index) {
       if (kind !== kinds().bundled) return '';
-      return index === 0 ? rules().lineType.bundled : rules().lineType.component;
+      return optValue('LineType', index === 0 ? 'bundled' : 'component');
     }
 
     // ---------------------------------------------------------------- portal characters (same rule as badChars_)
@@ -406,12 +436,12 @@
       var v = String(rec[c.key] == null ? '' : rec[c.key]).trim();
       if (c.late) { var dl = bizDeadline(v, ctx && ctx.today); return !!dl && dl.band === 'late'; }
       if (c.filled) return v !== '' && !isPlaceholder(v);
-      if (c.equals != null) return v === c.equals;
-      if (c.includes != null) return v.indexOf(c.includes) !== -1;
+      if (c.is != null) return keyOf(c.list, v) === c.is;
+      if (c.has != null) return v.split(/;\s*/).some(function (x) { return keyOf(c.list, x) === c.has; });
       if (c.inSetting) return ((ctx && ctx[c.inSetting]) || []).indexOf(v.toUpperCase()) !== -1;
       return true;
     }
-    function fieldShown(f, rec, ctx) { return !f.showIf || condMet(f.showIf, rec, ctx); }
+    function fieldShown(f, rec, ctx) { return f.visible !== false && (!f.showIf || condMet(f.showIf, rec, ctx)); }
     function fieldRequired(f, rec, ctx) {
       if (!fieldShown(f, rec, ctx)) return false;
       if (f.required) return true;
@@ -421,12 +451,19 @@
     }
     function isPlaceholder(v) { return /^(n\/?a|none|-+|\$)$/i.test(String(v).trim()); }
     function listValues(name) { return (S.boot && S.boot.options && S.boot.options[name]) || []; }
+    function isStrictList(name) { return entries(name).some(function (o) { return o.s; }); }
+    // A value an "Add new" box already knows: a value of its list, or (people boxes) an active member's email or name.
+    function knownValue(f, v) {
+      var key = optionKey(v);
+      if (listValues(f.options).some(function (x) { return optionKey(x) === key; })) return true;
+      return !!f.people && (S.boot.people || []).some(function (p) { return optionKey(p.email) === key || (p.name && optionKey(p.name) === key); });
+    }
     function cap(m) { m = String(m).replace(/^is required$/, 'Required'); return m.charAt(0).toUpperCase() + m.slice(1); }
     // Same checks and messages as checkField_ (the server words them after the field's label).
     function check(f, value, rec, ctx) {
       rec = rec || {};
       ctx = ctx || ctxFor();
-      if (!fieldShown(f, rec, ctx) || f.type === 'fixed') return '';
+      if (!fieldShown(f, rec, ctx) || isFixed(f)) return '';
       var v = value == null ? '' : String(value).trim();
       var req = fieldRequired(f, rec, ctx);
       var missing = f.requiredMsg || 'is required';
@@ -436,8 +473,12 @@
       if (f.digits) v = v.replace(/[\s-]/g, '');
       if (f.upper) v = v.toUpperCase();
       if (f.pattern && !new RegExp(f.pattern).test(v)) return cap(f.patternMsg || 'is not in the right format');
-      if (Array.isArray(f.options) && (f.type === 'radio' || f.type === 'select') && f.options.indexOf(v) === -1) return 'Not one of the portal’s options';
-      if (f.strict && typeof f.options === 'string' && listValues(f.options).indexOf(v) === -1) return 'Not one of the portal’s options';
+      var list = typeof f.options === 'string' ? f.options : '';
+      if (list && (f.type === 'radio' || f.type === 'select' || f.type === 'checkboxes' || isStrictList(list))) {
+        var vals = listValues(list), its = f.type === 'checkboxes' ? v.split(/;\s*/).filter(String) : [v];
+        if (its.some(function (x) { return vals.indexOf(x) === -1; })) return 'Not one of the options of the ' + list + ' list';
+      }
+      if (f.addNew === 'email' && !knownValue(f, v) && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return 'Must be a valid email to add a new one';
       if (f.chars) {
         var bad = badChars(f.chars, v);
         if (bad.length) return 'Has characters the portal does not accept (' + bad.join(' ') + '). Allowed: ' + CHAR_HELP[f.chars] + '.';
@@ -463,7 +504,7 @@
     // ---------------------------------------------------------------- line rules (same as lineRules_ and duplicateLines_)
 
     function coolingApplies(d, todayIso) {
-      return d.extension_reason === rules().extCooling && condMet({ key: 'on_start_date', late: true }, d, { today: todayIso || today() });
+      return keyOf('ExtensionReason', d.extension_reason) === 'cooling' && condMet({ key: 'on_start_date', late: true }, d, { today: todayIso || today() });
     }
     function dosSpread(lines) {
       var dates = lines.map(function (l) { return String(l.service_date || ''); }).filter(function (v) { return isoToUtc(v) !== null; }).sort();
@@ -558,6 +599,12 @@
     }
 
     function defaultFor(key) { return (S.boot.defaults || {})[key] || null; }
+    // @me: the signed-in LB Member's email; @myteam: the signed-in user's team (Users tab).
+    function resolveToken(v) {
+      if (v === '@me') return S.boot.role === 'LB Member' ? S.boot.me.email : '';
+      if (v === '@myteam') return S.boot.me.team || '';
+      return v;
+    }
 
     // Empty fields that have a default get it (marked with a chip). A billing entity's profile goes first.
     function applyDefaults(fields, rec) {
@@ -565,8 +612,9 @@
       var take = function (f) {
         var d = defaultFor(f.key);
         if (!d || isEmpty(d.value) || !isEmpty(rec[f.key])) return false;
-        if (Array.isArray(f.options) && f.options.indexOf(d.value) === -1) return false;
-        rec[f.key] = d.value;
+        var val = resolveToken(d.value);
+        if (isEmpty(val)) return false;
+        rec[f.key] = val;
         S.defaulted[f.key] = true;
         if (rec === S.d) S.pending[f.key] = d.value;
         return true;
@@ -711,10 +759,20 @@
       return Array.isArray(f.options) ? f.options : (S.boot.options[f.options] || []);
     }
 
-    function filesFor(category, lineNo) {
+    // QPA files belong to a saved line (lineNo) or to a new line not saved yet (lineKey).
+    function filesFor(category, lineNo, lineKey) {
       return S.files.filter(function (x) {
-        return x.Category === category && (category !== 'qpa' || Number(x.LineNo) === Number(lineNo));
+        if (x.Category !== category) return false;
+        if (category !== 'qpa') return true;
+        return (lineNo && Number(x.LineNo) === Number(lineNo)) || (!!lineKey && x.LineKey === lineKey && String(x.LineNo) === '');
       });
+    }
+
+    // Uploads go to the saved dispute, or to the draft token of a new one (Staging folder until the first save).
+    function uploadTarget() { return S.id || S.draftToken; }
+    function uuid() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var n = Math.random() * 16 | 0; return (c === 'x' ? n : (n & 3 | 8)).toString(16); });
     }
 
     // QPA files of other lines with this claim number: one EOB usually covers the whole claim.
@@ -733,7 +791,7 @@
 
     function chip(f, v) {
       var d = defaultFor(f.key);
-      if (!S.defaulted[f.key] || !d || String(v) !== String(d.value)) return '';
+      if (!S.defaulted[f.key] || !d || String(v) !== String(resolveToken(d.value))) return '';
       var learned = d.source === 'learned';
       return '<span class="chip' + (learned ? ' learned' : '') + '" data-default title="' +
         esc(learned ? 'Used on ' + Math.round(d.share * 100) + '% of the last ' + d.sample + ' saves' : 'Starting default') + '">default</span>';
@@ -776,20 +834,26 @@
         }
         h += '<div class="choices' + (locked ? ' hidden' : '') + '">';
         optionList(f).forEach(function (o) {
-          var note = f.notes && f.notes[o] ? '<span class="opt-note">' + esc(f.notes[o]) + '</span>' : '';
+          var oe = f.optionNotes ? entryFor(f.options, o) : null;
+          var note = oe && oe.l ? '<span class="opt-note">' + esc(oe.l) + '</span>' : '';
           h += '<label><input type="' + (f.type === 'radio' ? 'radio' : 'checkbox') + '" name="' + esc(f.key) + '" value="' + esc(o) + '"' +
             (picked.indexOf(o) !== -1 ? ' checked' : '') + '> <span>' + esc(o) + note + '</span></label>';
         });
         h += '</div>';
-        if (f.stop) h += '<div class="stop' + (String(v) === f.stop.value ? '' : ' hidden') + '" data-stop>' + esc(f.stop.message) + '. This dispute cannot go to the US desk.</div>';
+        if (f.stop) h += '<div class="stop' + (keyOf(f.options, v) === f.stop.is ? '' : ' hidden') + '" data-stop>' + esc(f.stop.message) + '. This dispute cannot go to the US desk.</div>';
       } else if (f.type === 'check') {
         h += '<div class="choices"><label><input type="checkbox" name="' + esc(f.key) + '" value="Yes"' + (String(v) === 'Yes' ? ' checked' : '') + '> <span>' + star + esc(f.label) + '</span></label></div>';
-      } else if (f.type === 'fixed') {
-        h += '<div class="lbl">' + label + '</div><div class="locked"><span class="lock">Fixed</span>' + esc(f.value) + '</div>';
+      } else if (isFixed(f)) {
+        h += '<div class="lbl">' + label + '</div><div class="locked"><span class="lock">Fixed</span>' + esc(f.default) + '</div>';
       } else if (f.type === 'select') {
         h += '<label for="' + id + '">' + label + '</label><select id="' + id + '" name="' + esc(f.key) + '"><option value="">Select an Option</option>';
         optionList(f).forEach(function (o) { h += '<option' + (o === String(v) ? ' selected' : '') + '>' + esc(o) + '</option>'; });
         h += '</select>';
+      } else if (f.type === 'combo' && f.addNew) {
+        // Searchable box: suggestions (and, for people, active members) with "Add new" when nothing matches.
+        h += '<label for="' + id + '">' + label + '</label><div class="search-box"><input type="text" id="' + id + '" name="' + esc(f.key) + '" value="' + esc(v) +
+          '" autocomplete="off" placeholder="' + esc(f.addNew === 'email' ? 'Search by name or email' : 'Search or add new') + '"><div class="dropdown hidden" data-dropdown></div></div>' +
+          '<div class="hint" data-hint></div>';
       } else if (f.type === 'combo') {
         h += '<label for="' + id + '">' + label + '</label><input type="text" id="' + id + '" name="' + esc(f.key) + '" value="' + esc(v) + '" list="dl_' + esc(f.key) +
           '" autocomplete="off"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '><datalist id="dl_' + esc(f.key) + '">' +
@@ -798,11 +862,11 @@
       } else if (f.type === 'textarea') {
         h += '<label for="' + id + '">' + label + '</label><textarea id="' + id + '" name="' + esc(f.key) + '">' + esc(v) + '</textarea>';
       } else if (f.type === 'file') {
-        var list = filesFor(f.category, lineNo);
+        var list = filesFor(f.category, lineNo, rec.lineKey);
         h += '<div class="lbl">' + star + esc(f.label) + '</div><div class="upload">' +
-          '<input type="file" multiple data-category="' + esc(f.category) + '" id="' + id + '">' +
+          '<input type="file" multiple data-category="' + esc(f.category) + '" id="' + id + '"' + (editable() ? '' : ' disabled') + '>' +
           (f.category === 'qpa' ? '<label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="same-claim" checked> Use for all lines with this claim number</label>' : '') +
-          '<div class="note">Files go to this dispute\'s Drive folder for the US desk to upload. Under 45 MB each; 500 MB for the whole dispute.</div>' +
+          '<div class="note">Files go to this dispute\'s Drive folder for the US desk to upload' + (S.id ? '' : ' (you can attach them before saving)') + '. Under ' + rules().maxFileMb + ' MB each; ' + rules().disputeMaxMb + ' MB for the whole dispute.</div>' +
           '<div class="file-list" data-files="' + esc(f.category) + '">' + fileRows(list) + '</div>' +
           (f.category === 'qpa' ? '<div class="note" data-claim-docs></div>' : '') + '</div>';
       } else {
@@ -829,7 +893,7 @@
       var out = {};
       fields.forEach(function (f) {
         if (f.type === 'file') return;
-        if (f.type === 'fixed') { out[f.key] = f.value; return; }
+        if (isFixed(f)) { out[f.key] = String(f.default); return; }
         var box = container.querySelector('.f[data-key="' + f.key + '"]');
         if (!box) return;
         if (f.type === 'radio') {
@@ -907,7 +971,7 @@
         if (!box) return;
         if (f.showIf) box.classList.toggle('hidden', !fieldShown(f, rec, ctx || ctxFor()));
         if (f.helper === 'deadline') box.querySelector('[data-deadline]').innerHTML = deadlineText(rec[f.key], rec);
-        if (f.stop) box.querySelector('[data-stop]').classList.toggle('hidden', String(rec[f.key]) !== f.stop.value);
+        if (f.stop) box.querySelector('[data-stop]').classList.toggle('hidden', keyOf(f.options, rec[f.key]) !== f.stop.is);
       });
       return rec;
     }
@@ -920,6 +984,7 @@
         if (!box) return;
         var el = box.querySelector('input, select, textarea');
         box.addEventListener('change', function () { dropChip(box); });
+        if (f.type === 'combo' && f.addNew) wireSearchBox(box, f);
         if (f.type === 'combo') {
           el.addEventListener('change', function () { comboChanged(container, box, f, rec); });
           if (f.fill && !isEmpty(rec[f.key])) showFillNote(container, box, f, rec, String(rec[f.key]), -1);
@@ -963,6 +1028,52 @@
       });
     }
 
+    // Matches for a searchable box: list values and (people boxes) active members, on value, email or name.
+    function searchMatches(f, typed) {
+      var q = String(typed || '').trim().toLowerCase();
+      var out = [], seen = {};
+      var add = function (value, text) {
+        var k = optionKey(value);
+        if (!k || seen[k]) return;
+        if (q && String(value).toLowerCase().indexOf(q) === -1 && String(text).toLowerCase().indexOf(q) === -1) return;
+        seen[k] = true;
+        out.push({ value: value, text: text });
+      };
+      if (f.people) (S.boot.people || []).forEach(function (p) { add(p.email, p.name ? p.name + ' · ' + p.email : p.email); });
+      entries(f.options).forEach(function (o) { add(o.v, o.l ? o.v + ' · ' + o.l : o.v); });
+      return out.slice(0, 8);
+    }
+
+    function wireSearchBox(box, f) {
+      var el = box.querySelector('input');
+      var dd = box.querySelector('[data-dropdown]');
+      var pick = function (v) { el.value = v; dd.classList.add('hidden'); el.dispatchEvent(new Event('change', { bubbles: true })); };
+      var show = function () {
+        var typed = el.value.trim();
+        var list = searchMatches(f, typed);
+        var exact = list.some(function (m) { return optionKey(m.value) === optionKey(typed); });
+        var html = list.map(function (m, i) { return '<button type="button" class="dd-item" data-i="' + i + '">' + esc(m.text) + '</button>'; }).join('');
+        if (typed && !exact) {
+          var ok = f.addNew !== 'email' || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(typed);
+          html += ok ? '<button type="button" class="dd-item dd-new" data-new>Add new: ' + esc(typed) + '</button>'
+            : '<div class="dd-note">To add a new one, type a full email address.</div>';
+        }
+        dd.innerHTML = html || '<div class="dd-note">No match.</div>';
+        dd.classList.remove('hidden');
+        dd.querySelectorAll('.dd-item').forEach(function (b) {
+          b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+          b.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (b.hasAttribute('data-new')) { pick(f.addNew === 'email' ? typed.toLowerCase() : typed); toast('New value: it is added to the list when you save.'); }
+            else pick(list[Number(b.getAttribute('data-i'))].value);
+          });
+        });
+      };
+      el.addEventListener('focus', show);
+      el.addEventListener('input', show);
+      el.addEventListener('blur', function () { setTimeout(function () { dd.classList.add('hidden'); }, 150); });
+    }
+
     function comboChanged(container, box, f, rec) {
       var el = box.querySelector('input');
       var hint = box.querySelector('[data-hint]');
@@ -972,7 +1083,7 @@
       hint.className = 'hint';
       hint.innerHTML = '';
       if (!v) return;
-      var s = f.multi ? '' : suggestFor(f, v);
+      var s = f.multi || (f.people && knownValue(f, v)) ? '' : suggestFor(f, v);
       if (s) {
         box.setAttribute('data-suggest', s);
         hint.className = 'hint ask';
@@ -997,7 +1108,7 @@
         if (f.chars && badChars(f.chars, v).length) showMsg(box, f, check(f, v, rec));
         return;
       }
-      var known = f.multi ? splitMulti(v).every(function (x) { return entryFor(f.options, x); }) : !!entryFor(f.options, v);
+      var known = f.multi ? splitMulti(v).every(function (x) { return entryFor(f.options, x); }) : (!!entryFor(f.options, v) || (f.people && knownValue(f, v)));
       if (!known) hint.textContent = 'New value: it is added to the list when you save.';
     }
 
@@ -1048,7 +1159,11 @@
       return all;
     }
 
-    function editable() { return S.d.Status !== 'Filed'; }
+    // Same rule as assertCanEdit_: LB Members edit Draft and Returned disputes, Admins every dispute not filed, US Members none.
+    function editable() {
+      if (!S.boot.isLb || S.d.Status === 'Filed') return false;
+      return S.boot.isAdmin || !S.d.Status || S.d.Status === 'Draft' || S.d.Status === 'Returned';
+    }
 
     // ---------------------------------------------------------------- completeness per page (the stepper)
 
@@ -1066,7 +1181,7 @@
         }
         var m = check(f, S.d[f.key], S.d, ctx);
         if (m) out.push(f.label + ' ' + m);
-        if (f.stop && String(S.d[f.key]) === f.stop.value) out.push(f.stop.message);
+        if (f.stop && keyOf(f.options, S.d[f.key]) === f.stop.is) out.push(f.stop.message);
       });
       if (page.id === 'qual') { var t = timingProblem(S.d); if (t) out.push(t); }
       return out;
@@ -1121,14 +1236,14 @@
     }
 
     // Files go up in parallel; each reply carries the dispute's file list, merged here.
-    function uploadAll(files, category, lineNo, sameClaim) {
+    function uploadAll(files, category, ln, sameClaim) {
       var big = files.filter(function (f) { return f.size > rules().fileLimit; })[0];
-      if (big) return Promise.reject(new Error(big.name + ' is over 45 MB.'));
+      if (big) return Promise.reject(new Error(big.name + ' is over ' + rules().maxFileMb + ' MB.'));
       var total = files.reduce(function (s, f) { return s + f.size; }, 0);
       if (rules().portalFileCategories.indexOf(category) !== -1 && disputeBytes() + total > rules().disputeFileLimit) return Promise.reject(new Error(rules().msg.fileLimit));
       return Promise.all(files.map(function (file) {
         return readAsBase64(file).then(function (b64) {
-          return call('uploadFile', S.id, category, lineNo || '', file.name, file.type, b64, !!sameClaim);
+          return call('uploadFile', uploadTarget(), category, ln.lineNo || '', file.name, file.type, b64, !!sameClaim, ln.lineKey || '');
         });
       })).then(function (replies) {
         // The last reply has every row (all uploads finished); rows from the others are merged in case of overlap.
@@ -1143,27 +1258,30 @@
     }
 
     // After an upload or removal only the file lists change, so anything typed but not yet saved stays put.
-    function updateFileLists(container, lineNo) {
+    // line() gives { lineNo, lineKey } of the open line form ({} on the dispute pages).
+    function updateFileLists(container, line) {
+      var ln = line();
       container.querySelectorAll('[data-files]').forEach(function (box) {
-        box.innerHTML = fileRows(filesFor(box.getAttribute('data-files'), lineNo()));
+        box.innerHTML = fileRows(filesFor(box.getAttribute('data-files'), ln.lineNo, ln.lineKey));
       });
-      wireRemoves(container, lineNo);
+      wireRemoves(container, line);
       if (container.updateClaimDocs) container.updateClaimDocs();
     }
 
-    function wireRemoves(container, lineNo) {
+    function wireRemoves(container, line) {
       container.querySelectorAll('[data-remove-file]').forEach(function (b) {
         b.addEventListener('click', function (e) {
           e.preventDefault();
+          var ln = line();
           busy(true);
-          call('removeFile', S.id, b.getAttribute('data-remove-file'), lineNo() || '')
-            .then(function (files) { S.files = files; busy(false); updateFileLists(container, lineNo); }).catch(fail);
+          call('removeFile', uploadTarget(), b.getAttribute('data-remove-file'), ln.lineNo || '', ln.lineKey || '')
+            .then(function (files) { S.files = files; busy(false); updateFileLists(container, line); }).catch(fail);
         });
       });
     }
 
-    // lineNo is a function so a line saved just before its first upload is picked up.
-    function wireUploads(container, lineNo, beforeUpload) {
+    // Files can be attached before the dispute or the line is saved; the server links them on the first save.
+    function wireUploads(container, line) {
       container.querySelectorAll('input[type=file][data-category]').forEach(function (input) {
         input.addEventListener('change', function () {
           if (!input.files.length) return;
@@ -1171,13 +1289,12 @@
           var cat = input.getAttribute('data-category');
           var same = container.querySelector('#same-claim');
           busy(true);
-          (beforeUpload ? beforeUpload() : Promise.resolve(lineNo()))
-            .then(function (ln) { return uploadAll(files, cat, ln, cat === 'qpa' && same && same.checked); })
-            .then(function () { busy(false); input.value = ''; updateFileLists(container, lineNo); toast('Uploaded'); })
+          uploadAll(files, cat, line(), cat === 'qpa' && same && same.checked)
+            .then(function () { busy(false); input.value = ''; updateFileLists(container, line); toast('Uploaded'); })
             .catch(fail);
         });
       });
-      wireRemoves(container, lineNo);
+      wireRemoves(container, line);
     }
 
     // ---------------------------------------------------------------- data loading
@@ -1200,7 +1317,7 @@
       refresh().then(function () {
         busy(false);
         if (view) S.view = view;
-        else if (S.d.Status === 'Ready for US desk' && S.boot.isUsDesk) S.view = 'desk';
+        else if (S.boot.role === 'US Member' || (S.d.Status === 'Ready for US desk' && S.boot.isUsDesk)) S.view = 'desk';
         else { S.view = 'edit'; S.page = S.lines.length ? 6 : 0; }
         render();
       }).catch(fail);
@@ -1247,15 +1364,15 @@
     }
 
     function renderList() {
-      var filters = ['Draft', 'Returned', 'Ready for US desk', 'Filed', 'All'];
+      var filters = S.boot.role === 'US Member' ? ['Ready for US desk', 'Filed', 'All'] : ['Draft', 'Returned', 'Ready for US desk', 'Filed', 'All'];
       app.innerHTML = '<div class="list-head"><div><h1>Disputes</h1><p class="sub">Prepare each Notice of IDR Initiation here, on 7 pages in the portal\'s order.</p></div>' +
         '<div class="right" style="display:flex;gap:8px;flex-wrap:wrap"><button class="ghost" id="insights">Insights</button>' +
-        (S.boot.isAdmin ? '<button class="ghost" id="admin">Lists</button>' : '') +
-        '<button class="primary" id="new">+ New dispute</button></div></div>' +
+        (S.boot.isAdmin ? '<button class="ghost" id="admin">Admin</button>' : '') +
+        (S.boot.isLb ? '<button class="primary" id="new">+ New dispute</button>' : '') + '</div></div>' +
         '<div class="filters">' + filters.map(function (f) { return '<button data-f="' + esc(f) + '"' + (S.filter === f ? ' class="on"' : '') + '>' + esc(f) + '</button>'; }).join('') + '</div>' +
         '<div id="rows" style="margin-top:12px"><p class="muted">Loading…</p></div>';
-      app.querySelector('#new').addEventListener('click', function () {
-        S.id = null; S.d = { Status: 'Draft' }; S.lines = []; S.files = []; S.warnings = []; S.deadline = null;
+      if (app.querySelector('#new')) app.querySelector('#new').addEventListener('click', function () {
+        S.id = null; S.draftToken = 'DRAFT-' + uuid(); S.d = { Status: 'Draft' }; S.lines = []; S.files = []; S.warnings = []; S.deadline = null;
         S.page = 0; S.view = 'edit'; S.defaulted = {}; S.pending = {}; S.unlocked = {}; S.line = null; S.paste = null; render();
       });
       app.querySelector('#insights').addEventListener('click', function () { S.view = 'insights'; render(); });
@@ -1292,12 +1409,12 @@
     }
 
     function rowsTable(rows) {
-      return '<div style="overflow-x:auto"><table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Type</th><th>Line items</th><th>Initiation</th><th>Team / owner</th><th>Last update</th></tr>' +
+      return '<div style="overflow-x:auto"><table class="grid"><tr><th>Dispute</th><th>Status</th><th>Plan or company</th><th>Type</th><th>Line items</th><th>Initiation</th><th>Team / RCM Specialist</th><th>Last update</th></tr>' +
         rows.map(function (r) {
           return '<tr class="click" data-id="' + esc(r.id) + '"><td><b>' + esc(r.id) + '</b>' + (r.portalNumber ? '<div class="muted">' + esc(r.portalNumber) + '</div>' : '') + '</td><td>' + badge(r.status) +
             (r.idreStatus ? '<div class="muted" style="margin-top:4px">IDRE: ' + esc(r.idreStatus) + '</div>' : '') +
             (r.returnReason ? '<div class="muted" style="margin-top:4px">' + esc(r.returnReason) + '</div>' : '') + '</td><td>' + esc(r.plan) +
-            '</td><td>' + esc(r.kind) + '</td><td>' + esc(r.lines) + '</td><td>' + dueCell(r) + '</td><td>' + esc([r.team, r.owner].filter(String).join(' / ')) +
+            '</td><td>' + esc(r.kind) + '</td><td>' + esc(r.lines) + '</td><td>' + dueCell(r) + '</td><td>' + esc([r.team, r.rcm].filter(String).join(' / ')) +
             '</td><td>' + esc(r.updatedAt) + '<div class="muted">' + esc(r.updatedBy) + '</div></td></tr>';
         }).join('') + '</table></div>';
     }
@@ -1401,8 +1518,7 @@
       card.querySelectorAll('.poc-toggle').forEach(function (b) {
         b.addEventListener('click', function (e) { e.preventDefault(); b.closest('.poc').classList.remove('collapsed'); });
       });
-      wireUploads(card, function () { return ''; }, null);
-      card.querySelectorAll('input[type=file]').forEach(function (i) { if (!S.id) { i.disabled = true; i.title = 'Save the page first'; } });
+      wireUploads(card, function () { return {}; });
 
       var save = function (next) {
         if (!editable()) { if (next) { S.page++; render(); } return; }
@@ -1413,17 +1529,17 @@
         if (pendingSuggestion(card)) return;
         var missingFile = fields.some(function (f) { return f.type === 'file' && fieldRequired(f, rec, ctxFor(rec)) && !filesFor(f.category).length; });
         busy(true);
-        call('saveDispute', { id: S.id, values: values, page: page.id }).then(function (r) {
-          var first = !S.id;
+        call('saveDispute', { id: S.id, values: values, page: page.id, draftToken: S.id ? '' : S.draftToken }).then(function (r) {
           S.id = r.id;
+          S.draftToken = null;
           S.pending = {};
           learnLocal(fields, values);
           apply(r.bundle);
           busy(false);
-          if (next && missingFile && !first) { toast('Saved. Upload the required document before continuing.', true); render(); return; }
-          if (next && !first) S.page++;
+          if (next && missingFile) { toast('Saved. Upload the required document before continuing.', true); render(); return; }
+          if (next) S.page++;
           render();
-          toast(first && missingFile ? 'Saved. Now upload the required documents.' : 'Saved');
+          toast('Saved');
         }).catch(fail);
       };
       S.save = function () { save(false); };
@@ -1441,11 +1557,12 @@
       if (prev) fields.forEach(function (f) { if (f.carry && !isEmpty(prev[f.key])) rec[f.key] = prev[f.key]; });
       fields.forEach(function (f) { delete S.defaulted[f.key]; });
       applyDefaults(fields, rec);
+      rec.lineKey = uuid(); // files picked before the line is saved are kept under this key
       return rec;
     }
 
     function duplicateOf(src) {
-      var rec = {};
+      var rec = { lineKey: uuid() };
       lineSchemaFields().forEach(function (f) { if (f.type !== 'file' && !isEmpty(src[f.key])) rec[f.key] = src[f.key]; });
       return rec;
     }
@@ -1564,18 +1681,15 @@
       form.updateClaimDocs = function () {
         var box = form.querySelector('[data-claim-docs]');
         if (!box) return;
-        var shared = filesFor('qpa', S.line && S.line.LineNo).length ? [] : sameClaimDocs(claimInput.value, S.line && S.line.LineNo);
+        var shared = filesFor('qpa', S.line && S.line.LineNo, S.line && S.line.lineKey).length ? [] : sameClaimDocs(claimInput.value, S.line && S.line.LineNo);
         box.textContent = shared.length ? 'Uses the QPA documentation already uploaded for this claim number: ' +
           shared.map(function (x) { return x.Name; }).join(', ') + '. It is linked to this line when you save.' : '';
       };
       claimInput.addEventListener('input', form.updateClaimDocs);
       form.updateClaimDocs();
 
-      // Files picked on a new line are uploaded once the line is saved.
-      wireUploads(form, function () { return S.line && S.line.LineNo; }, function () {
-        if (S.line.LineNo) return Promise.resolve(S.line.LineNo);
-        return saveLineForm(form, fields, true);
-      });
+      // Files picked on a new line are kept under its line key and linked when the line is saved.
+      wireUploads(form, function () { return { lineNo: S.line && S.line.LineNo, lineKey: S.line && !S.line.LineNo ? S.line.lineKey : '' }; });
 
       form.querySelector('#cancel').addEventListener('click', function () { S.line = null; render(); });
       if (form.querySelector('#del')) form.querySelector('#del').addEventListener('click', function () {
@@ -1646,20 +1760,20 @@
       return mine.length > 0;
     }
 
-    // Saves the open line form. With skipFileCheck, it saves without requiring QPA documents (used before an upload).
-    function saveLineForm(form, fields, skipFileCheck) {
+    // Saves the open line form (its QPA documentation must be attached first, or come from another line of the claim).
+    function saveLineForm(form, fields) {
       var values = readFields(form, fields);
       var rec = Object.assign({}, S.line, values);
       if (showErrors(form, fields, rec, ctxFor(S.d))) { toast('Fix the highlighted fields to save the line.', true); return Promise.reject(new Error('Fix the highlighted fields first.')); }
       if (pendingSuggestion(form)) return Promise.reject(new Error('Check the suggested spelling first.'));
-      var hasDocs = (S.line.LineNo && filesFor('qpa', S.line.LineNo).length) || sameClaimDocs(values.claim_number, S.line.LineNo).length;
-      if (!skipFileCheck && !hasDocs) {
+      var hasDocs = filesFor('qpa', S.line.LineNo, S.line.lineKey).length || sameClaimDocs(values.claim_number, S.line.LineNo).length;
+      if (!hasDocs) {
         toast('Upload the claim and QPA documentation for this line.', true);
         return Promise.resolve(null);
       }
       busy(true);
-      return call('saveLine', S.id, S.line.LineNo || null, values).then(function (r) {
-        S.line = Object.assign({}, rec, { LineNo: r.lineNo });
+      return call('saveLine', S.id, S.line.LineNo || null, values, S.line.LineNo ? '' : S.line.lineKey || '').then(function (r) {
+        S.line = Object.assign({}, rec, { LineNo: r.lineNo, lineKey: '' });
         learnLocal(fields, values);
         apply(r.bundle);
         busy(false);
@@ -1681,7 +1795,7 @@
     function parsePaste(text) {
       var fields = lineSchemaFields();
       var ctx = ctxFor(S.d);
-      var itemDefault = (defaultFor('item_types') || {}).value || 'Emergency item(s)/service(s)';
+      var itemDefault = (defaultFor('item_types') || {}).value || optValue('ItemType', 'emergency');
       var posDefault = (defaultFor('pos_code') || {}).value || '23';
       return String(text || '').split(/\r?\n/).filter(function (l) { return l.trim(); }).filter(function (l, i) {
         return !(i === 0 && /claim/i.test(l) && /desc/i.test(l));
@@ -1757,7 +1871,7 @@
 
     function shownValue(f, rec, lineNo) {
       if (f.type === 'file') return filesFor(f.category, lineNo).map(function (x) { return x.Name; }).join(', ') || '(no file)';
-      if (f.type === 'fixed') return f.value;
+      if (isFixed(f)) return String(f.default);
       var v = rec[f.key];
       if (isEmpty(v)) return '';
       if (f.type === 'date') return usDate(v);
@@ -1879,11 +1993,12 @@
     function tickTimer() {
       var el = document.getElementById('timer');
       if (!el || !S.timer) return;
-      var mins = (Date.now() - S.timer.start) / 60000, left = Math.max(0, 60 - mins);
+      var total = rules().sessionMinutes, warnAt = rules().warnMinutes;
+      var mins = (Date.now() - S.timer.start) / 60000, left = Math.max(0, total - mins);
       var m = Math.floor(left), s = Math.floor((left - m) * 60);
       el.textContent = (left > 0 ? m + ':' + ('0' + s).slice(-2) + ' left' : 'Time is up');
-      el.className = 'timer' + (mins >= 60 ? ' over' : mins >= 50 ? ' warn' : '');
-      if (mins >= 50 && !S.timer.warned) { S.timer.warned = true; toast('50 minutes in the portal: finish and submit, or the session times out at 60 minutes and nothing is saved.', 'warn'); }
+      el.className = 'timer' + (mins >= total ? ' over' : mins >= warnAt ? ' warn' : '');
+      if (mins >= warnAt && !S.timer.warned) { S.timer.warned = true; toast(warnAt + ' minutes in the portal: finish and submit, or the session times out at ' + total + ' minutes and nothing is saved.', 'warn'); }
     }
 
     function renderDesk() {
@@ -1899,7 +2014,8 @@
         (dl && S.d.Status !== 'Filed' ? '<div>' + deadlineText(S.d.on_start_date, S.d) + '</div>' : '') + '</div>' +
         '<div class="progress"><b id="prog-text"></b><div class="bar"><i id="prog-bar"></i></div>' +
         '<p style="margin:8px 0 0"><a target="_blank" rel="noopener" href="' + esc(S.d.FolderUrl) + '">Open dispute folder</a>' +
-        (S.d.ConfirmationPdfUrl ? ' · <a target="_blank" rel="noopener" href="' + esc(S.d.ConfirmationPdfUrl) + '">Prepared summary PDF</a>' : '') + '</p></div></div>';
+        (S.d.ConfirmationPdfUrl ? ' · <a target="_blank" rel="noopener" href="' + esc(S.d.ConfirmationPdfUrl) + '">Prepared summary PDF</a>' : '') +
+        (S.boot.isAdmin ? ' · <button class="link" id="to-editor">Open in editor</button>' : '') + '</p></div></div>';
       if (today() <= gw.noSignInEnds) {
         h += '<div class="banner"><b>IDR Gateway change.</b> From ' + esc(portalDate(gw.transition)) + ' the Notice of IDR Initiation web form is inside the IDR Gateway: sign in first ' +
           '(Disputes, then Start a Dispute). The form without sign-in is not available after ' + esc(portalDate(gw.noSignInEnds)) +
@@ -1912,8 +2028,8 @@
       }
       if (S.d.Status !== 'Filed') {
         h += '<div class="card page-card"><div class="session"><div><b>Start only when you can finish this dispute in one sitting.</b>' +
-          '<div class="muted">The portal times out after 60 minutes of inactivity and saves nothing when you leave it.</div></div>' +
-          '<div style="display:flex;gap:10px;align-items:center"><span id="timer" class="timer">' + (S.timer ? '' : '60:00') + '</span>' +
+          '<div class="muted">The portal times out after ' + rules().sessionMinutes + ' minutes of inactivity and saves nothing when you leave it.</div></div>' +
+          '<div style="display:flex;gap:10px;align-items:center"><span id="timer" class="timer">' + (S.timer ? '' : rules().sessionMinutes + ':00') + '</span>' +
           '<button class="primary" id="start-timer"' + lockAttr + '>' + (S.timer ? 'Restart timer' : 'Start portal entry') + '</button></div></div></div>';
       }
 
@@ -1963,7 +2079,7 @@
           '<div class="lbl" style="font-size:13px;font-weight:600"><span class="req">*</span> Notice of IDR Initiation PDF (Save as PDF in the portal)</div><input type="file" id="portal-pdf" accept="application/pdf" style="margin:6px 0 12px">' +
           '<div class="lbl" style="font-size:13px;font-weight:600"><span class="req">*</span> Copy of the notice sent to the non-initiating party on</div><input type="date" id="nip-date" value="' + esc(today()) + '" max="' + esc(today()) + '">' +
           '<div class="lbl" style="font-size:13px;font-weight:600"><span class="req">*</span> Sent by</div><select id="nip-method"><option value="">Select</option>' +
-          rules().nipMethods.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select>' +
+          listValues('NipMethod').map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select>' +
           '<div><button class="success" id="filed"' + lockAttr + '>Mark as filed</button></div></div>' +
           '<div><b>Something is wrong</b>' +
           '<input type="text" id="reason" list="dl_return" placeholder="Reason" autocomplete="off"><datalist id="dl_return">' +
@@ -1978,13 +2094,14 @@
           h += '<div class="card" style="margin-top:16px"><b>Certified IDR entity selection</b> <span class="muted">(optional tracking)</span>' +
             '<div class="finish" style="margin-top:8px"><div><input type="text" id="idre-final" list="dl_idre" placeholder="Final certified IDR entity" value="' + esc(S.d.idre_final || S.d.idr_entity || '') + '" autocomplete="off">' +
             '<datalist id="dl_idre">' + entries('IdrEntity').map(function (o) { return '<option value="' + esc(o.v) + '"></option>'; }).join('') + '</datalist></div>' +
-            '<div><select id="idre-status">' + rules().idreStatus.map(function (s) { return '<option' + (s === (S.d.idre_status || 'Pending') ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
+            '<div><select id="idre-status">' + listValues('IdreStatus').map(function (s) { return '<option' + (s === (S.d.idre_status || optValue('IdreStatus', 'pending')) ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
             '</select></div></div><button class="secondary" id="idre-save">Save selection</button></div>';
         }
       }
 
       app.innerHTML = h;
       app.querySelector('#exit').addEventListener('click', function () { S.view = 'list'; render(); });
+      if (app.querySelector('#to-editor')) app.querySelector('#to-editor').addEventListener('click', function () { S.view = 'edit'; S.page = 6; render(); });
       app.querySelectorAll('[data-line-tab]').forEach(function (b) {
         b.addEventListener('click', function () { S.deskLine = Number(b.getAttribute('data-line-tab')); var y = window.scrollY; renderDesk(); window.scrollTo(0, y); });
       });
@@ -2076,7 +2193,7 @@
               shareBar(Math.round(d.share * 100)) + ' <span class="muted">' + Math.round(d.share * 100) + '%</span></td><td>' + esc(d.sample) + '</td></tr>';
           }).join('') + '</table></div></div>';
         h += '<div class="ins-grid">' + r.lists.map(function (l) {
-          return '<div class="card"><h2>' + esc(l.list) + '</h2><p class="muted" style="margin:0 0 8px">' + esc(l.values) + ' value(s) · ' + esc(l.total) + ' use(s) · ' +
+          return '<div class="card"><h2>' + esc(l.title || l.list) + '</h2><p class="muted" style="margin:0 0 8px">' + esc(l.values) + ' value(s) · ' + esc(l.total) + ' use(s) · ' +
             esc(l.addedThisWeek) + ' new this week' + (l.pending ? ' · <b>' + esc(l.pending) + ' waiting for an admin</b>' : '') + '</p>' +
             (l.top.length ? '<table class="grid"><tr><th>Value</th><th>Uses</th><th>Share</th></tr>' + l.top.map(function (t) {
               return '<tr><td>' + esc(t.value) + (t.label ? '<div class="muted">' + esc(t.label) + '</div>' : '') + '</td><td>' + esc(t.count) + '</td><td>' + shareBar(t.share) + ' <span class="muted">' + esc(t.share) + '%</span></td></tr>';
@@ -2086,48 +2203,69 @@
       }).catch(fail);
     }
 
-    // ---------------------------------------------------------------- Lists (admins)
+    // ---------------------------------------------------------------- Admin (Lists, Users, Billing entities, Settings & fields)
+
+    var ADMIN_TABS = [['lists', 'Lists'], ['users', 'Users'], ['entities', 'Billing entities'], ['config', 'Settings & fields']];
 
     function renderAdmin() {
-      app.innerHTML = '<div class="list-head"><div><button class="link" id="exit">← All disputes</button><h1>Lists</h1>' +
-        '<p class="sub">Rename, merge, hide or reactivate list values. Hidden values are never suggested. Merging moves the uses into the other value.</p></div></div>' +
+      var tab = S.admin.tab || 'lists';
+      app.innerHTML = '<div class="list-head"><div><button class="link" id="exit">← All disputes</button><h1>Admin</h1>' +
+        '<p class="sub">Every change is written to the Sheet and the Log. Other users see it on their next page load.</p></div></div>' +
+        '<div class="admin-tabs">' + ADMIN_TABS.map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + esc(t[1]) + '</button>'; }).join('') + '</div>' +
         '<div id="adm"><p class="muted">Loading…</p></div>';
       app.querySelector('#exit').addEventListener('click', function () {
         // Pick up the changes in the entry screens.
         call('getBootstrap', false).then(function (b) { setBoot(Object.assign({}, b, { list: null })); }).catch(function () {});
         S.view = 'list'; render();
       });
-      call('adminListOptions', S.admin.list || '').then(showAdmin).catch(fail);
+      app.querySelectorAll('[data-tab]').forEach(function (b) {
+        b.addEventListener('click', function () { S.admin.tab = b.getAttribute('data-tab'); renderAdmin(); });
+      });
+      if (tab === 'lists') call('adminListOptions', S.admin.list || '').then(showAdmin).catch(fail);
+      if (tab === 'users') call('adminListUsers').then(showUsers).catch(fail);
+      if (tab === 'entities') call('adminListEntities').then(showEntities).catch(fail);
+      if (tab === 'config') call('adminGetConfig').then(showConfig).catch(fail);
     }
 
+    function admBox() { var box = app.querySelector('#adm'); return box && S.view === 'admin' ? box : null; }
+    function sel(attr, options, value) {
+      return '<select ' + attr + '>' + options.map(function (o) { return '<option' + (String(o) === String(value) ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
+    }
+    function inp(attr, value, width) { return '<input type="text" ' + attr + ' value="' + esc(value) + '"' + (width ? ' style="max-width:' + width + 'px"' : '') + '>'; }
+    function adminSave(fn, args, then) {
+      busy(true);
+      call.apply(null, [fn].concat(args)).then(function (d) { busy(false); toast('Saved'); then(d); }).catch(fail);
+    }
+
+    // ---- Lists (Options tab)
     function showAdmin(r) {
       S.admin.data = r;
-      var box = app.querySelector('#adm');
-      if (!box || S.view !== 'admin') return;
+      var box = admBox();
+      if (!box || (S.admin.tab || 'lists') !== 'lists') return;
       var h = '<div class="admin-layout"><div class="admin-lists">' + r.lists.map(function (l) {
-        return '<button data-list="' + esc(l.list) + '" class="' + (l.list === S.admin.list ? 'on' : '') + '">' + esc(l.list) +
+        return '<button data-list="' + esc(l.list) + '" class="' + (l.list === S.admin.list ? 'on' : '') + '">' + esc(l.list) + (l.strict ? ' · strict' : '') +
           ' <span class="muted">(' + esc(l.active) + (l.hidden ? ' + ' + esc(l.hidden) + ' hidden' : '') + ')</span></button>';
       }).join('') + '</div><div>';
       if (!r.rows) {
         h += '<div class="card">Pick a list. Learning mode is <b>' + esc(r.learningMode) + '</b>' +
           (r.learningMode === 'Off' ? ': new values typed by users wait here as Hidden until you activate them.' : ': new values are active at once (training phase).') +
-          ' Change it in the Settings tab.</div>';
+          ' Strict lists hold the portal\'s exact wording: they never learn, and the rules use their Key, so you can reword a value when CMS changes it.</div>';
       } else {
         var active = r.rows.filter(function (x) { return x.status !== 'Hidden'; }).map(function (x) { return x.value; });
         h += '<datalist id="dl_admin">' + active.map(function (v) { return '<option value="' + esc(v) + '"></option>'; }).join('') + '</datalist>' +
-          '<div style="overflow-x:auto"><table class="grid"><tr><th>Value</th><th>Label</th><th>Uses</th><th>Last used</th><th>Source</th><th>Status</th><th>Actions</th></tr>' +
+          '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Value</th><th>Key</th><th>Label</th><th>Sort</th><th>Uses</th><th>Source</th><th>Status</th><th>Actions</th></tr>' +
           r.rows.map(function (x, i) {
-            var badName = (r.list === 'Payer' || r.list === 'BillingEntity') && badChars('name', x.value).length;
-            return '<tr class="' + (x.status === 'Hidden' ? 'hidden-row' : '') + '" data-i="' + i + '"><td><b>' + esc(x.value) + '</b>' +
+            var badName = r.list === 'Payer' && badChars('name', x.value).length;
+            return '<tr class="' + (x.status === 'Hidden' ? 'hidden-row' : '') + '" data-i="' + i + '"><td>' + inp('data-value', x.value) +
               (badName ? '<div class="muted">Portal rejects: ' + esc(badChars('name', x.value).join(' ')) + ' (Fix gives "' + esc(fixChars('name', x.value)) + '")</div>' : '') +
               (x.similar ? '<div class="muted">Looks like: ' + esc(x.similar) + '</div>' : '') +
               (x.mergedInto ? '<div class="muted">Merged into: ' + esc(x.mergedInto) + '</div>' : '') + '</td>' +
-              '<td><input type="text" data-label value="' + esc(x.label) + '"></td><td>' + esc(x.count) + '</td><td>' + esc(x.lastUsed) + '</td><td>' + esc(x.source) +
-              '<div class="muted">' + esc(x.addedBy) + '</div></td><td>' + esc(x.status) + '</td>' +
-              '<td><div class="row-actions"><button class="secondary" data-act="label">Save label</button>' +
+              '<td>' + esc(x.key) + '</td><td>' + inp('data-label', x.label) + '</td><td>' + inp('data-sort', x.sort, 60) + '</td><td>' + esc(x.count) + '</td><td>' + esc(x.source) +
+              '</td><td>' + esc(x.status) + '</td>' +
+              '<td><div class="row-actions"><button class="secondary" data-act="save">Save</button>' +
               '<button class="ghost" data-act="status">' + (x.status === 'Hidden' ? 'Activate' : 'Hide') + '</button>' +
-              '<input type="text" data-merge list="dl_admin" placeholder="Merge into…" value="' + esc(x.similar) + '" style="max-width:160px">' +
-              '<button class="ghost" data-act="merge">Merge</button></div></td></tr>';
+              (x.key && r.strict ? '' : '<input type="text" data-merge list="dl_admin" placeholder="Merge into…" value="' + esc(x.similar) + '" style="max-width:150px">' +
+              '<button class="ghost" data-act="merge">Merge</button>') + '</div></td></tr>';
           }).join('') + '</table></div>';
       }
       box.innerHTML = h + '</div></div>';
@@ -2144,15 +2282,119 @@
           var x = r.rows[Number(tr.getAttribute('data-i'))];
           var act = b.getAttribute('data-act');
           var change = {};
-          if (act === 'label') change.label = tr.querySelector('[data-label]').value.trim();
+          if (act === 'save') {
+            change.label = tr.querySelector('[data-label]').value.trim();
+            change.sort = tr.querySelector('[data-sort]').value.trim();
+            var nv = tr.querySelector('[data-value]').value.trim();
+            if (nv !== x.value) {
+              if (!confirm('Reword "' + x.value + '" as "' + nv + '"? Saved disputes keep the old text.')) return;
+              change.value = nv;
+            }
+          }
           if (act === 'status') change.status = x.status === 'Hidden' ? 'Active' : 'Hidden';
           if (act === 'merge') {
             change.mergeInto = tr.querySelector('[data-merge]').value.trim();
             if (!change.mergeInto) { toast('Type the value to merge into.', true); return; }
             if (!confirm('Merge "' + x.value + '" into "' + change.mergeInto + '"? Its ' + x.count + ' use(s) move there and it is hidden.')) return;
           }
-          busy(true);
-          call('adminUpdateOption', S.admin.list, x.value, change).then(function (d) { busy(false); toast('Saved'); showAdmin(d); }).catch(fail);
+          adminSave('adminUpdateOption', [S.admin.list, x.value, change], showAdmin);
+        });
+      });
+    }
+
+    // ---- Users
+    function showUsers(r) {
+      var box = admBox();
+      if (!box || S.admin.tab !== 'users') return;
+      var row = function (u, i) {
+        return '<tr data-i="' + i + '"><td>' + (u.email ? '<b>' + esc(u.email) + '</b>' : inp('data-email', '')) + '</td><td>' + inp('data-name', u.name) + '</td><td>' +
+          sel('data-role', r.roles, u.role || 'LB Member') + '</td><td>' + inp('data-team', u.team, 120) + '</td><td>' + sel('data-active', ['Yes', 'No'], u.active === false ? 'No' : 'Yes') +
+          '</td><td>' + inp('data-notes', u.notes) + '</td><td><button class="secondary" data-save>' + (u.email ? 'Save' : 'Add') + '</button></td></tr>';
+      };
+      var rows = r.users.concat([{ email: '', name: '', role: 'LB Member', team: '', active: true, notes: '' }]);
+      box.innerHTML = '<div class="card" style="margin-bottom:12px">Roles: <b>Admin</b> (everything, plus these views), <b>LB Member</b> (prepares Draft and Returned disputes, sends them to the US desk), ' +
+        '<b>US Member</b> (copy desk, files, returns). Members are never deleted: set Active to No. The last active Admin cannot be removed or given another role.</div>' +
+        '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Email</th><th>Name</th><th>Role</th><th>Team</th><th>Active</th><th>Notes</th><th></th></tr>' +
+        rows.map(row).join('') + '</table></div>';
+      box.querySelectorAll('[data-save]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tr = b.closest('tr'), u = rows[Number(tr.getAttribute('data-i'))];
+          var q = function (a) { var el = tr.querySelector('[' + a + ']'); return el ? el.value.trim() : ''; };
+          adminSave('adminSaveUser', [{ email: u.email || q('data-email'), name: q('data-name'), role: q('data-role'), team: q('data-team'),
+            active: q('data-active') === 'Yes', notes: q('data-notes') }], showUsers);
+        });
+      });
+    }
+
+    // ---- Billing entities
+    var ENTITY_EDIT = ['Name', 'ActingAs', 'TIN', 'NPI', 'GroupName', 'Addr1', 'Addr2', 'City', 'State', 'ZIP', 'Email', 'Phone', 'Fax', 'Confirmed', 'Status', 'Aliases', 'Notes'];
+    function showEntities(r) {
+      var box = admBox();
+      if (!box || S.admin.tab !== 'entities') return;
+      var cell = function (c, v) {
+        if (c === 'ActingAs') return sel('data-c="ActingAs"', [''].concat(r.actingAs), v);
+        if (c === 'State') return sel('data-c="State"', [''].concat(r.states), v);
+        if (c === 'Confirmed') return sel('data-c="Confirmed"', ['Yes', 'No'], v || 'No');
+        if (c === 'Status') return sel('data-c="Status"', ['Active', 'Hidden'], v || 'Active');
+        return inp('data-c="' + c + '"', v, c === 'State' || c === 'ZIP' ? 90 : 0);
+      };
+      var rows = r.rows.concat([{ Name: '' }]);
+      box.innerHTML = '<div class="card" style="margin-bottom:12px">The initiating party address book. Picking an entity fills I am a(n), Tax ID, NPI, the group name and the contact details. ' +
+        'Saving a dispute fills empty columns and counts uses; it never overwrites what you enter here. Renaming keeps the old name as an alias.</div>' +
+        '<div style="overflow-x:auto"><table class="grid edit"><tr>' + ENTITY_EDIT.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '<th>Uses</th><th></th></tr>' +
+        rows.map(function (e, i) {
+          return '<tr data-i="' + i + '"' + (String(e.Status).toLowerCase() === 'hidden' ? ' class="hidden-row"' : '') + '>' +
+            ENTITY_EDIT.map(function (c) { return '<td>' + cell(c, e[c] == null ? '' : e[c]) + '</td>'; }).join('') +
+            '<td>' + esc(e.Count || '') + '</td><td><button class="secondary" data-save>' + (e.Name ? 'Save' : 'Add') + '</button></td></tr>';
+        }).join('') + '</table></div>';
+      box.querySelectorAll('[data-save]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tr = b.closest('tr'), e = rows[Number(tr.getAttribute('data-i'))];
+          var out = {};
+          tr.querySelectorAll('[data-c]').forEach(function (el) { out[el.getAttribute('data-c')] = el.value.trim(); });
+          adminSave('adminSaveEntity', [out, e.Name || ''], showEntities);
+        });
+      });
+    }
+
+    // ---- Settings & fields
+    function showConfig(r) {
+      var box = admBox();
+      if (!box || S.admin.tab !== 'config') return;
+      var h = (r.warnings.length ? warnBox(r.warnings, 'Configuration problems (the built-in values are used instead):') + '<br>' : '') +
+        '<h2>Settings</h2><div style="overflow-x:auto"><table class="grid edit"><tr><th>Key</th><th>Value</th><th>In use</th><th>What it does</th><th></th></tr>' +
+        r.settings.map(function (x, i) {
+          return '<tr data-i="' + i + '"><td><b>' + esc(x.key) + '</b></td><td>' + inp('data-v', x.value, 160) + '</td><td>' + esc(x.effective) + '</td><td class="muted">' + esc(x.note) +
+            '</td><td><button class="secondary" data-set>Save</button></td></tr>';
+        }).join('') + '</table></div>';
+      var lists = r.lists || {};
+      h += '<h2 style="margin-top:22px">Fields</h2><p class="muted">Required = Rule means the portal rule is in the code (it depends on other answers). ' +
+        'Default mode: Fixed uses the default; Learned uses the value most saves used, or the default; None leaves the field empty. Locked shows a fixed default as a chip.</p>' +
+        '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Page</th><th>Key</th><th>Label</th><th>Help</th><th>Required</th><th>Default</th><th>Mode</th><th>Locked</th><th>Visible</th><th>Order</th><th></th></tr>' +
+        r.fields.map(function (f, i) {
+          var dl = f.list && lists[f.list] ? ' list="dl_cfg_' + esc(f.list) + '"' : '';
+          return '<tr data-i="' + i + '"><td>' + esc(f.page) + '</td><td>' + esc(f.key) + '<div class="muted">' + esc(f.type) + (f.list ? ' · ' + esc(f.list) : '') + '</div></td><td>' +
+            inp('data-label', f.label) + '</td><td>' + inp('data-help', f.help) + '</td><td>' +
+            (f.rule ? 'Rule' : sel('data-req', ['Yes', 'No'], f.required)) + '</td><td><input type="text" data-def value="' + esc(f.default) + '"' + dl + ' style="max-width:150px"></td><td>' +
+            sel('data-mode', r.defaultModes, f.defaultMode) + '</td><td>' + sel('data-locked', ['No', 'Yes'], f.locked ? 'Yes' : 'No') + '</td><td>' +
+            sel('data-vis', ['Yes', 'No'], f.visible ? 'Yes' : 'No') + '</td><td>' + inp('data-order', f.order, 50) + '</td><td><button class="secondary" data-field>Save</button></td></tr>';
+        }).join('') + '</table></div>' +
+        Object.keys(lists).map(function (l) { return '<datalist id="dl_cfg_' + esc(l) + '">' + lists[l].map(function (v) { return '<option value="' + esc(v) + '"></option>'; }).join('') + '</datalist>'; }).join('');
+      box.innerHTML = h;
+      box.querySelectorAll('[data-set]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tr = b.closest('tr'), x = r.settings[Number(tr.getAttribute('data-i'))];
+          adminSave('adminSaveSetting', [x.key, tr.querySelector('[data-v]').value.trim()], showConfig);
+        });
+      });
+      box.querySelectorAll('[data-field]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tr = b.closest('tr'), f = r.fields[Number(tr.getAttribute('data-i'))];
+          var q = function (a) { var el = tr.querySelector('[' + a + ']'); return el ? el.value.trim() : null; };
+          var change = { label: q('data-label'), help: q('data-help'), default: q('data-def'), defaultMode: q('data-mode'), locked: q('data-locked'),
+            visible: q('data-vis'), order: q('data-order') };
+          if (!f.rule) change.required = q('data-req');
+          adminSave('adminSaveField', [f.key, change], showConfig);
         });
       });
     }
@@ -2176,9 +2418,8 @@
     // The first screen's data is built into the page; the server call is only a fallback.
     (BOOT && !BOOT.error ? Promise.resolve(BOOT) : call('getBootstrap', true)).then(function (boot) {
       setBoot(boot);
-      document.getElementById('who').innerHTML = esc(boot.user) + (boot.isUsDesk ? '<span class="desk-pill">US desk</span>' : '') +
-        (boot.isAdmin ? '<span class="desk-pill">Admin</span>' : '');
-      if (boot.isUsDesk) S.filter = 'Ready for US desk';
+      document.getElementById('who').innerHTML = esc(boot.me.name || boot.user) + '<span class="desk-pill">' + esc(boot.role) + '</span>';
+      if (boot.role === 'US Member') S.filter = 'Ready for US desk';
       if (boot.list && boot.listFilter === S.filter) S.lists[S.filter] = { rows: boot.list, at: Date.now() };
       render();
       setTimeout(function () { loader.classList.add('loaded'); }, 300);

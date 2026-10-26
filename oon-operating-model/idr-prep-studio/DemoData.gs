@@ -3,8 +3,9 @@
  *
  * Add this file next to Code.gs (+ > Script, name it DemoData), then run from the editor:
  *   seedDemoData()      creates 12 synthetic disputes across the whole cycle
- *   demoUseUsView()     adds you to the US desk (copy desk view)
- *   demoUseLebanonView() removes you from the US desk (Lebanon entry view)
+ *   demoUseUsView()     makes you a US Member (copy desk view)
+ *   demoUseLebanonView() makes you an LB Member (Lebanon entry view)
+ *   demoUseAdminView()  makes you an Admin again
  *   clearDemoData()     deletes every demo dispute, its rows and its Drive folder
  *
  * Claims, amounts, dates, people, portal dispute numbers and documents are made up. The payers,
@@ -24,7 +25,8 @@ const DEMO_PREFIX = 'IDR-DEMO-';
 
 const DEMO_STREETS = ['Main St', 'Commerce St', 'Elm St', 'Congress Ave', 'Preston Rd', 'Camp Bowie Blvd', 'Lamar Blvd'];
 const DEMO_TEAMS = ['Team 1', 'Team 2', 'Team 3', 'Team 4', 'Team 5', 'Team 6', 'Team 7', 'Team 8', 'Team 9', 'Team 10'];
-const DEMO_OWNERS = ['R. Haddad', 'M. Khoury', 'J. Saad', 'L. Nassar', 'S. Aoun', 'N. Fares', 'K. Daher'];
+const DEMO_RCM = ['r.haddad@demo.example', 'm.khoury@demo.example', 'j.saad@demo.example', 'l.nassar@demo.example', 's.aoun@demo.example'];
+const DEMO_POC = ['R. Haddad', 'M. Khoury', 'J. Saad', 'L. Nassar', 'S. Aoun', 'N. Fares', 'K. Daher'];
 const DEMO_LEBANON_USERS = ['r.haddad@demo.example', 'm.khoury@demo.example', 'j.saad@demo.example'];
 // Used only when the ServiceCode list has no descriptions (setup() not run yet).
 const DEMO_CODES_FALLBACK = [{ v: '99284', l: 'EMERGENCY ROOM SERVICE' }, { v: '94761', l: 'MEASURE BLOOD OXYGEN LEVEL' },
@@ -38,20 +40,21 @@ const DEMO_PLAN = [
   { stage: 'draft-lines', type: 'batched', lines: 2, day: 33 },
   { stage: 'returned', type: 'batched', lines: 3, day: 31, mismatch: 2, reason: 'Wrong amount',
     details: 'Line 2: cost sharing plus initial payment does not equal the QPA. Re-check the EOB and re-attach.' },
-  { stage: 'ready', type: 'single', lines: 1, day: 32, planType: 'Fully-insured ERISA group health plan' },
+  { stage: 'ready', type: 'single', lines: 1, day: 32, planType: 'fully_insured' },
   { stage: 'ready', type: 'bundled', lines: 3, day: 33 },
   { stage: 'ready', type: 'batched', lines: 5, day: 34, poc: true, modifiers: true },
   { stage: 'ready', type: 'batched', lines: 12, day: 31 },
   { stage: 'ready', type: 'batched', lines: 3, day: 40, cooling: true }, // past the window: cooling off period extension
-  { stage: 'filed', type: 'batched', lines: 2, day: 33, idre: 'Accepted preferred' },
-  { stage: 'filed', type: 'single', lines: 1, day: 34, noticeLate: true, idre: 'Pending' }, // notice sent the next day: shows the warning
+  { stage: 'filed', type: 'batched', lines: 2, day: 33, idre: 'accepted_preferred' },
+  { stage: 'filed', type: 'single', lines: 1, day: 34, noticeLate: true, idre: 'pending' }, // notice sent the next day: shows the warning
   { stage: 'ready', type: 'batched', lines: 2, day: 25 } // prepared ahead: on the US desk under "Not open yet"
 ];
 
 // ------------------------------------------------------------------ public functions
 
 function seedDemoData() {
-  if (!ss_().getSheetByName(TABS.disputes) || !ss_().getSheetByName(TABS.settings)) setup();
+  requireEditorOrAdmin_();
+  if (!ss_().getSheetByName(TABS.disputes) || !ss_().getSheetByName(TABS.users)) setup();
   clearDemoData();
 
   // Rows are collected here and written once per tab at the end.
@@ -78,26 +81,26 @@ function seedDemoData() {
     const id = DEMO_PREFIX + pad3_(i + 1);
     const payer = payers[i % payers.length];
     // Three in four disputes are the facility, as on the notices seen so far.
-    const entity = entities.filter(function (e) { return e.d.acting_as === (i % 4 === 3 ? ACTING_AS[0] : ACTING_AS[1]); })[0] || entities[0];
+    const entity = entities.filter(function (e) { return e.d.acting_as === optValue_('ActingAs', i % 4 === 3 ? 'provider' : 'facility'); })[0] || entities[0];
     const ed = entity.d;
     const preparer = DEMO_LEBANON_USERS[i % DEMO_LEBANON_USERS.length];
     const created = daysAgo_(today, 12 - i);
     const onStart = demoOnStart_(todayIso, spec.day);
     const folder = disputeFolder_(id);
-    const planType = spec.planType || PLAN_TYPE_DEFAULT;
-    const type = spec.type === 'batched' ? DISPUTE_TYPES[1] : DISPUTE_TYPES[0];
-    const bundled = spec.type === 'batched' ? '' : spec.type === 'bundled' ? 'Yes' : 'No';
+    const planType = optValue_('HealthPlanType', spec.planType || 'self_insured');
+    const type = optValue_('DisputeType', spec.type === 'batched' ? 'batched' : 'single');
+    const bundled = spec.type === 'batched' ? '' : optValue_('BundledPayment', spec.type === 'bundled' ? 'yes' : 'no');
 
     // ---- header (pages 1-4 and page 6)
     const v = {
-      DisputeID: id, Status: STATUS.draft, Team: pick_(DEMO_TEAMS, i), Owner: pick_(DEMO_OWNERS, i),
+      DisputeID: id, Status: STATUS.draft, Team: pick_(DEMO_TEAMS, i), RcmSpecialist: pick_(DEMO_RCM, i),
       CreatedBy: preparer, CreatedAt: stamp_(created), UpdatedBy: preparer, UpdatedAt: stamp_(daysAgo_(today, Math.max(0, 6 - i))),
       FolderUrl: folder.getUrl(),
-      q_prior_2022: 'No', q_acting_as: ed.acting_as, tin: ed.tin || '', npi: ed.npi || '', q_plan_type: planType,
-      on_start_date: onStart, consent_waiver: 'No', prov_name: entity.v
+      q_prior_2022: optValue_('YesNo', 'no'), q_acting_as: ed.acting_as, tin: ed.tin || '', npi: ed.npi || '', q_plan_type: planType,
+      on_start_date: onStart, consent_waiver: optValue_('YesNo', 'no'), prov_name: entity.v
     };
     if (spec.cooling) {
-      v.extension_reason = EXT_COOLING;
+      v.extension_reason = optValue_('ExtensionReason', 'cooling');
       v.cooling_dispute_ref = 'DISP-' + (100000 + i); // synthetic reference
     }
     if (spec.stage !== 'draft-qual') {
@@ -112,7 +115,7 @@ function seedDemoData() {
       });
       if (spec.poc) {
         Object.assign(v, {
-          prov_p1_name: pick_(DEMO_OWNERS, i), prov_p1_addr1: (500 + i * 11) + ' ' + pick_(DEMO_STREETS, i + 3),
+          prov_p1_name: pick_(DEMO_POC, i), prov_p1_addr1: (500 + i * 11) + ' ' + pick_(DEMO_STREETS, i + 3),
           prov_p1_city: 'Fort Worth', prov_p1_state: 'TX', prov_p1_zip: '76132',
           prov_p1_email: 'idr.team' + (i + 1) + '@er-demo.example', prov_p1_phone: '(817) 555-04' + pad2_(i)
         });
@@ -125,7 +128,7 @@ function seedDemoData() {
     }
     if (spec.stage === 'returned' || spec.stage === 'ready' || spec.stage === 'filed') {
       v.idr_entity = i % 4 === 1 ? idrEntities[1] || idrEntities[0] : idrEntities[0];
-      v.third_party_attest = 'No';
+      v.third_party_attest = optValue_('YesNo', 'no');
       v.coi_attest = 'Yes';
     }
 
@@ -151,7 +154,7 @@ function seedDemoData() {
         DisputeID: id, LineNo: n,
         claim_number: claim, service_date: dos, description: desc(c),
         qpa: qpa, cost_sharing: cost, initial_payment: initial,
-        item_types: 'Emergency item(s)/service(s)', other_desc: '',
+        item_types: optValue_('ItemType', 'emergency'), other_desc: '',
         service_code: c.v, modifiers: spec.modifiers && n === 2 ? '25; 59' : '', pos_code: '23', location: LOCATION
       });
       if (!eob) eob = createDemoPdf_(folder, 'EOB - ' + id + '.pdf', 'Explanation of Benefits / Remittance Advice', ['Payer: ' + payer.v, 'Synthetic claim ' + claim]);
@@ -180,9 +183,9 @@ function seedDemoData() {
       v.FiledAt = stamp_(filedOn);
       v.PortalDisputeNumber = 'DISP-' + (900000 + i); // synthetic
       v.nip_notified_date = isoDate_(spec.noticeLate ? daysAgo_(today, 1) : filedOn);
-      v.nip_notified_method = 'Email';
-      v.idre_status = spec.idre || 'Pending';
-      v.idre_final = spec.idre === 'Accepted preferred' ? v.idr_entity : '';
+      v.nip_notified_method = optValue_('NipMethod', 'email');
+      v.idre_status = optValue_('IdreStatus', spec.idre || 'pending');
+      v.idre_final = spec.idre === 'accepted_preferred' ? v.idr_entity : '';
     }
 
     disputeRecs.push(v);
@@ -201,7 +204,7 @@ function seedDemoData() {
   CacheService.getScriptCache().remove('defaults');
 
   Logger.log('Demo data ready: ' + DEMO_PLAN.length + ' disputes (' + DEMO_PREFIX + '001 to ' + DEMO_PREFIX + pad3_(DEMO_PLAN.length) + ').');
-  Logger.log('You are ' + (isUsDesk_(me) ? 'on the US desk view.' : 'on the Lebanon view.') + ' Run demoUseUsView() or demoUseLebanonView() to switch.');
+  Logger.log('You are ' + ((me_() || {}).Role || 'not a member') + '. Run demoUseUsView(), demoUseLebanonView() or demoUseAdminView() to switch.');
 }
 
 // The start date that makes today business day n of open negotiation (the start date is day 1).
@@ -232,25 +235,38 @@ function learnDemo_(disputes, lines) {
   props.setProperty('DEMO_LEARNED', nowStr_());
 }
 
-/** Puts your account on the US desk: opening a Ready dispute shows the copy desk. */
-function demoUseUsView() {
-  const me = currentUser_();
-  if (isUsDesk_(me)) { Logger.log(me + ' is already on the US desk view. Reload the web app.'); return; }
-  appendRecords_(TABS.options, [optionRecord_('UsDeskUser', me, { source: 'seed', addedBy: 'demoUseUsView()' })]);
-  clearOptionsCache_();
-  Logger.log(me + ' now sees the US desk view. Reload the web app.');
+// Demo view switching changes your own role on the Users tab. It is allowed for an Admin, and for the person who
+// switched away from Admin with these functions (so demoUseAdminView() can switch back). The last-Admin rule is not
+// applied here on purpose: demoUseAdminView() restores it.
+function demoSetRole_(role) {
+  const me = String(currentUser_()).toLowerCase();
+  const props = PropertiesService.getScriptProperties();
+  const u = userOf_(me);
+  if (!(u && u.Role === ROLES.admin) && props.getProperty('DEMO_SWITCH_EMAIL') !== me) throw new Error('Only an Admin can switch demo views.');
+  if (u && u.Role === ROLES.admin) props.setProperty('DEMO_SWITCH_EMAIL', me);
+  withLock_(function () {
+    clearUsersCache_();
+    const cur = usersAll_().filter(function (x) { return x.Email === me; })[0];
+    if (cur) writeRecord_(TABS.users, cur.rowNum, Object.assign(rowAt_(TABS.users, cur.rowNum), { Role: role, Active: 'Yes' }));
+    else appendRecords_(TABS.users, [{ Email: me, Role: role, Active: 'Yes', AddedBy: 'demo', AddedAt: nowStr_(), Notes: 'Demo view switch' }]);
+    log_('', 'user', me + ': ' + role + ' (demo view switch)');
+  });
+  clearUsersCache_();
+  Logger.log(me + ' is now ' + role + '. Reload the web app.');
 }
 
-/** Takes your account off the US desk: you see the Lebanon entry screens. */
-function demoUseLebanonView() {
-  const me = String(currentUser_()).toLowerCase();
-  const removed = deleteWhere_(TABS.options, function (r) { return r.List === 'UsDeskUser' && String(r.Value).toLowerCase() === me; });
-  clearOptionsCache_();
-  Logger.log(removed ? me + ' now sees the Lebanon view. Reload the web app.' : me + ' was already on the Lebanon view.');
-}
+/** Makes your account a US Member: opening a Ready dispute shows the copy desk. */
+function demoUseUsView() { demoSetRole_(ROLES.us); }
+
+/** Makes your account an LB Member: you see the Lebanon entry screens. */
+function demoUseLebanonView() { demoSetRole_(ROLES.lb); }
+
+/** Makes your account an Admin again. */
+function demoUseAdminView() { demoSetRole_(ROLES.admin); }
 
 /** Removes every demo dispute: its rows in all tabs and its Drive folder. Real disputes and the lists are untouched. */
 function clearDemoData() {
+  requireEditorOrAdmin_();
   [TABS.disputes, TABS.lines, TABS.files, TABS.log].forEach(function (name) {
     if (!ss_().getSheetByName(name)) return;
     deleteWhere_(name, function (r) { return String(r.DisputeID).indexOf(DEMO_PREFIX) === 0; });
