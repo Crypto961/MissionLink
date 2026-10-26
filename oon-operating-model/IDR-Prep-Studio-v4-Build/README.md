@@ -1,6 +1,6 @@
 # IDR Prep Studio v4 — build folder
 
-Version 4.0 · 2026-10-26 · aligned with the IDR Gateway "Notice of IDR Initiation User Guide", Version 15.0, October 14, 2026
+Version 4.1 · 2026-10-27 · aligned with the IDR Gateway "Notice of IDR Initiation User Guide", Version 15.0, October 14, 2026
 
 | Folder | File | What it is |
 | --- | --- | --- |
@@ -20,6 +20,7 @@ Version 4.0 · 2026-10-26 · aligned with the IDR Gateway "Notice of IDR Initiat
 - Billing entities have their own tab and admin editor.
 - Documents can be attached before the first save. Staged files belong to the uploader, move to the dispute on save, and are cleaned up after 7 days.
 - An independent review fixed 11 defects (file deletion, draft ownership, first-setup access, admin lockout, double filing and more).
+- v4.1: every page (and Line Items) blocks Continue until all issues are fixed; unlisted users can request access and Admins approve or reject it; Admins can add, edit, hide and remove list values and custom lists; all 24 billing entities are seeded with full profiles.
 
 ## Before go-live
 
