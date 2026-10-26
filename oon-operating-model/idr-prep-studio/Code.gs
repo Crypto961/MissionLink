@@ -939,6 +939,8 @@ function storeLines_(id, items, u) {
     fields.forEach(function (f) { if (f.type !== 'file') rec[f.key] = safe_(normValue_(f, (it.values || {})[f.key])); });
     let found = -1;
     all.forEach(function (r, i) { if (r.DisputeID === id && Number(r.LineNo) === Number(lineNo)) found = i + 2; });
+    // A line number given must be a saved line: new lines only come through the add path above (with its checks).
+    if (it.lineNo && found === -1) throw new Error('Line ' + it.lineNo + ' is not a line item of ' + id + '.');
     olds.push(found === -1 ? {} : Object.assign({}, all[found - 2]));
     if (found === -1) adds.push(rec); else dirty[found] = Object.assign({}, all[found - 2], rec); // keeps columns not in the schema
     out.push({ lineNo: Number(lineNo), rec: rec, values: it.values || {}, lineKey: it.lineKey });
@@ -1066,7 +1068,13 @@ function uploadFile(target, category, lineNo, name, mimeType, data, sameClaim, l
   const u = requireRole_(ROLES.admin, ROLES.lb);
   if (!target) throw new Error('No dispute to attach the file to.');
   if (['portal_confirmation', 'confirmation_pdf'].indexOf(category) !== -1) throw new Error('That document is added by the app.');
-  withLock_(function () { if (isDraftToken_(target)) assertOwnDraft_(target, u); else assertCanEdit_(target, u); });
+  withLock_(function () {
+    if (isDraftToken_(target)) assertOwnDraft_(target, u); else assertCanEdit_(target, u);
+    // A line number must be a saved line of this dispute (a line not saved yet uses its lineKey).
+    if (lineNo && !rows_(table_(TABS.lines)).some(function (l) { return l.DisputeID === target && Number(l.LineNo) === Number(lineNo); })) {
+      throw new Error('Line ' + lineNo + ' is not a saved line item of ' + target + '.');
+    }
+  });
   return storeFile_(target, category, lineNo, name, mimeType, data, sameClaim, lineKey);
 }
 

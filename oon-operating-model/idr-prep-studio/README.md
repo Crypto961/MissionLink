@@ -173,6 +173,8 @@ Everyone who uses the app must be an **active row on the Users tab**. Anyone els
 - The last active Admin cannot be deactivated or given another role.
 - Every change is written to the **Log**.
 - While the tab has no active member, the account the app runs as is treated as Admin, so nobody is locked out before `setup`.
+- There is always at least one active Admin: a change that would leave none (including adding a non-Admin as the first member) is refused.
+- First setup: while no member is active, only the script owner (the account the script runs as) can run `setup`, `installTriggers` and the demo functions; other visitors are refused.
 
 ## The tabs (v4)
 
@@ -236,6 +238,8 @@ The rules refer to their Keys. For example, HealthPlanType `fehb` asks for the e
 - **New dispute:** the browser gives it a draft token (`DRAFT-…`). Its files wait in the Drive folder **IDR Prep Studio - Disputes/Staging/<token>**. The first save moves them into the dispute's folder and links them to the new dispute id.
 - **New line:** the line has a line key. Its files are linked to its line number when the line is saved. "Use for all lines with this claim number" then also attaches them to the claim's other lines.
 - Removing a file works the same before and after saving.
+- **Draft ownership.** Staged files belong to the member who uploaded them: only they can attach more to, remove from, or (on the first save) relink that draft. An upload that finishes just after the first save still goes to the new dispute.
+- A file goes to a saved line by its line number, or to a line not saved yet by its line key; a line number that is not a saved line of the dispute is refused (by uploads and by line saves).
 - **Cleanup.** Staged files that never became part of a saved dispute or line are deleted after `StagingDays` days (7 by default). `cleanupStaging_` runs on every `setup`. Run **installTriggers** once from the editor to run it every day at about 3 AM (function `dailyMaintenance`); running it again keeps a single trigger.
 
 ## Deploy (about 15 minutes)
@@ -415,7 +419,7 @@ Add `DemoData.gs` as a second script file (**+ → Script**, name it **DemoData*
 | Function | What it does |
 | --- | --- |
 | `seedDemoData` | Creates 12 synthetic disputes, `IDR-DEMO-001` to `IDR-DEMO-012`, with synthetic documents in Drive. Running it again replaces them. |
-| `demoUseLebanonView` / `demoUseUsView` / `demoUseAdminView` | Change your own role on the Users tab: LB Member (entry screens), US Member (copy desk), or back to Admin. Only an Admin, or the admin who switched away, can use them. |
+| `demoUseLebanonView` / `demoUseUsView` / `demoUseAdminView` | Change your own role on the Users tab: LB Member (entry screens), US Member (copy desk), or back to Admin. Only an Admin, or the admin who switched away, can use them. Switching back to Admin, or any change an admin makes to that member on the Users tab, ends the switch. |
 | `clearDemoData` | Deletes every `IDR-DEMO-` dispute, its rows and its Drive folder |
 
 The demo data is all synthetic:
