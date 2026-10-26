@@ -55,7 +55,7 @@
     <tr><td>Non-initiating party</td><td><?= d.plan_name ?> (<?= d.plan_role ?>)</td></tr>
     <tr><td>Address</td><td><?= [d.plan_addr1, d.plan_addr2, d.plan_city, d.plan_state, d.plan_zip].filter(String).join(', ') ?></td></tr>
     <tr><td>Email / phone</td><td><?= d.plan_email ?> / <?= d.plan_phone ?></td></tr>
-    <tr><td>Team / owner</td><td><?= [d.Team, d.Owner].filter(String).join(' / ') ?></td></tr>
+    <tr><td>Team / RCM Specialist</td><td><?= [d.Team, d.RcmSpecialist].filter(String).join(' / ') ?></td></tr>
   </table>
 
   <h2>Summary of Qualified Items and/or Services (<?= data.lines.length ?>)</h2>

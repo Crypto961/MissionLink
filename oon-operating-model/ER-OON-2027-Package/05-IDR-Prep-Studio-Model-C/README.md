@@ -1,4 +1,4 @@
-# IDR Initiation Prep Studio (v3)
+# IDR Initiation Prep Studio (v4)
 
 An internal Google Apps Script web app. Lebanon prepares each Notice of IDR Initiation here, on 7 pages that follow the federal **IDR Gateway** web form page by page. The US desk then copies every field into the portal from top to bottom, with one click per field.
 
@@ -11,10 +11,21 @@ v3 follows the official **IDR Gateway Notice of IDR Initiation User Guide, versi
 
 The app learns as it is used. Every dropdown list lives in the **Options** tab and grows as people save. The values used most are suggested first, and the defaults follow what recent disputes used. See [The learning system](#the-learning-system).
 
+**New in v4: configuration and access live in the Sheet.**
+- **Options:** every list, including the portal's fixed answers. Each option has a stable **Key**, so an admin can reword the text when CMS changes it.
+- **Fields:** each field's label, help, required, default, default mode, locked, visible and order.
+- **Users:** who may use the app, and their role.
+- **BillingEntities:** our billing entities.
+- **Admin screens:** an admin edits all of this in the app: Lists, Users, Billing entities, and Settings & fields.
+- **Upload before saving:** files can be attached before a dispute or line is saved.
+- **RCM Specialist:** Owner is renamed RCM Specialist.
+
+The values written in `Code.gs` are only the fallback seed, used when a tab, list or row is missing.
+
 | File | What it is |
 | --- | --- |
-| `Code.gs` | Server code: portal field schema, Sheet storage, Drive uploads, the portal's rules, deadlines, the learning system, Insights, Lists admin, confirmation PDF, US desk actions, `setup()` and the v3 upgrade |
-| `Index.html` | The app: dispute list, the 7 entry pages, the US copy desk, Insights and Lists (admins) |
+| `Code.gs` | Server code: built-in field schema and fallback lists, the Fields merge, roles, Sheet storage, Drive uploads and staging, the portal's rules, deadlines, the learning system, Insights, the admin functions, confirmation PDF, US desk actions, `setup()` and the upgrades |
+| `Index.html` | The app: dispute list, the 7 entry pages, the US copy desk, Insights and the Admin screens |
 | `Pdf.html` | Layout of the confirmation PDF |
 | `DemoData.gs` | Optional. Synthetic demo disputes, view switching for demos, and cleanup |
 
@@ -147,6 +158,90 @@ Copied formats:
 - Phones as `(817) 566-1232`.
 - Modifiers as `25; 59`.
 
+## Roles
+
+Everyone who uses the app must be an **active row on the Users tab**. Anyone else sees "Access not granted". Every server function checks the role, not only the screens.
+
+| Role | Can |
+| --- | --- |
+| **LB Member** | Create disputes; edit Draft and Returned disputes, their lines and files; send them to the US desk; read every dispute and Insights. Cannot file, return or change configuration. |
+| **US Member** | Read Ready and Filed disputes; copy desk; Start portal entry; Mark as filed; return to Lebanon; record the IDR entity selection. Cannot edit dispute data or configuration. |
+| **Admin** | Everything above (Ready disputes open in the copy desk, with **Open in editor**), plus the **Admin** screens: Lists, Users, Billing entities, Settings & fields. Only admins can run `setup`, the demo functions and `installTriggers`. |
+
+**Users tab rules:**
+- Members are never deleted: set **Active** to No.
+- The last active Admin cannot be deactivated or given another role.
+- Every change is written to the **Log**.
+- While the tab has no active member, the account the app runs as is treated as Admin, so nobody is locked out before `setup`.
+- There is always at least one active Admin: a change that would leave none (including adding a non-Admin as the first member) is refused.
+- First setup: while no member is active, only the script owner (the account the script runs as) can run `setup`, `installTriggers` and the demo functions; other visitors are refused.
+
+## The tabs (v4)
+
+| Tab | Columns |
+| --- | --- |
+| **Options** | List, Key, Value, Label, Data, Count, LastUsed, Source, Status, Sort, Strict, AddedBy, AddedAt. **Key:** a stable id the rules use (blank for ordinary values). **Sort:** display order (lists with Sort values keep it; others are ranked by use). **Strict = Yes:** the portal's exact wording; the list never learns new values. |
+| **Fields** | Page, Section, Order, Key, Label, Help, Type, List, Required, Default, DefaultMode, Locked, Visible, Pattern, PatternMessage, CopyOrder, Notes |
+| **Users** | Email, Name, Role (Admin, LB Member, US Member), Team, Active, AddedBy, AddedAt, Notes |
+| **BillingEntities** | Name, ActingAs, TIN, NPI, GroupName, Addr1, Addr2, City, State, ZIP, Email, Phone, Fax, Confirmed, Status, Count, LastUsed, AddedBy, AddedAt, Notes, Aliases (semicolon list) |
+| **Settings** | Key, Value, Note (see [Settings](#settings)) |
+| **Disputes, LineItems, Files, Log** | As in v3. Disputes: `Owner` is now `RcmSpecialist`. Files: new `LineKey` and `SameClaim` columns, for files attached to a line before it is saved. |
+
+**Strict lists** hold the portal's exact text:
+- HealthPlanType, PlanRole, ActingAs, ExtensionReason, ItemType, DisputeType, LineType.
+- The fixed answer lists: YesNo, BundledPayment, NipMethod, IdreStatus.
+
+The rules refer to their Keys. For example, HealthPlanType `fehb` asks for the enrollment code; ExtensionReason `cooling` asks for the DISP reference. If CMS rewords an option, an admin edits its Value in **Admin → Lists**. The rules keep working, and disputes saved with the old text keep it.
+
+**Fields tab merge.** At runtime the built-in schema is merged with the Fields tab.
+- **The sheet wins** for Label, Help, Required, Default, DefaultMode, Locked, Visible, Order, Pattern, PatternMessage and CopyOrder.
+- **Required = Rule** marks fields whose required-ness is portal logic in code: Tax ID or NPI, fields that depend on other answers, and points of contact. These cannot be changed there. The other portal rules stay in code too: timing bands, batch counts, date-of-service spread, duplicate lines and character sets.
+- **DefaultMode:**
+  - **Fixed** always uses the Default column.
+  - **Learned** uses the value most recent saves used, when it dominates (otherwise the Default).
+  - **None** gives no default.
+- **Tokens in Default:**
+  - `@top` = the most used value of the list.
+  - `@me` = the signed-in LB Member's email (RCM Specialist).
+  - `@myteam` = the signed-in user's team from the Users tab.
+- **Locked = Yes** with a Fixed default shows the value as a chip and always stores it (Location of Service = TX).
+- **Bad configuration never breaks the app.** Unknown keys, invalid values, a default that is not an option of its list, an invalid pattern, or hiding a required field are all ignored. The built-in value is used instead, and the problem shows as a warning in **Admin → Settings & fields**.
+- `setup` adds a Fields row for each new built-in field and never changes existing rows. A built-in label that changes in a later code version therefore does not replace the label already in the sheet.
+
+## Admin screens
+
+- **Lists:** every Options list. You can:
+  - Reword a value (keeps its Key), and change its label or sort order.
+  - Hide or activate a value.
+  - Merge a learned value into another one.
+
+  Portal options with a Key are reworded, never merged. Names the portal would reject are flagged, with what Fix would give.
+- **Users:** add a member (email checked), change the name, role, team, active flag or notes.
+- **Billing entities:** add and edit every column, with checks: TIN 9 digits, NPI 10, ZIP, phone, email, the portal's name and address characters, I am a(n) from the ActingAs list.
+  - Hide or activate an entity.
+  - Renaming keeps the old name in Aliases.
+  - Saving a dispute counts uses, adds a new entity (Confirmed No; Hidden while `LearningMode` is Off) and fills empty columns. It never overwrites a non-empty value, except an unconfirmed I am a(n), which the saved dispute confirms.
+- **Settings & fields:** edit each setting and each field (label, help, required, default, default mode, locked, visible, order). Values are checked before saving; for example, a default must be an option of its list. Configuration warnings show at the top.
+
+## RCM Specialist and Team
+
+- **RCM Specialist** (was Owner): a searchable box.
+  - It suggests active members (by email or name) and the RcmSpecialist list.
+  - When nothing matches, it offers **Add new: <typed text>**. A new value must be a valid email; it joins the RcmSpecialist list on save and shows for everyone.
+  - For an LB Member it defaults to their own email.
+- **Team:** the same searchable box. Any name made of the portal's name characters can be added. It defaults to the signed-in user's team from the Users tab.
+- A value the portal would refuse is saved on the draft but never added to a list: a non-email RCM Specialist, a 4-character service code, a 3-character modifier, or a name with rejected characters.
+
+## Upload before saving
+
+- Files can be attached on any page of a new dispute before its first save, and on a new line before the line is saved.
+- **New dispute:** the browser gives it a draft token (`DRAFT-…`). Its files wait in the Drive folder **IDR Prep Studio - Disputes/Staging/<token>**. The first save moves them into the dispute's folder and links them to the new dispute id.
+- **New line:** the line has a line key. Its files are linked to its line number when the line is saved. "Use for all lines with this claim number" then also attaches them to the claim's other lines.
+- Removing a file works the same before and after saving.
+- **Draft ownership.** Staged files belong to the member who uploaded them: only they can attach more to, remove from, or (on the first save) relink that draft. An upload that finishes just after the first save still goes to the new dispute.
+- A file goes to a saved line by its line number, or to a line not saved yet by its line key; a line number that is not a saved line of the dispute is refused (by uploads and by line saves).
+- **Cleanup.** Staged files that never became part of a saved dispute or line are deleted after `StagingDays` days (7 by default). `cleanupStaging_` runs on every `setup`. Run **installTriggers** once from the editor to run it every day at about 3 AM (function `dailyMaintenance`); running it again keeps a single trigger.
+
 ## Deploy (about 15 minutes)
 
 1. Create a Google Sheet named **IDR Prep Studio**.
@@ -155,19 +250,37 @@ Copied formats:
 4. Add two HTML files with **+ → HTML**, named exactly **Index** and **Pdf**, and paste in `Index.html` and `Pdf.html`.
 5. Click **Services +**, choose **Google Sheets API** and click **Add**. Keep the identifier `Sheets`. This makes the app much faster; without it the app still works, more slowly.
 6. Select **setup** in the function menu and click **Run**. Approve the permissions prompt. This creates:
-   - The tabs **Disputes**, **LineItems**, **Files**, **Options**, **Settings** and **Log**.
-   - The seed lists in **Options** (see [Seed lists](#seed-lists)).
-   - The **Settings** rows: `LearningMode` = `On`, `DefaultWindow` = `50`, `DefaultShare` = `0.8`, `ComplexStates` = empty.
+   - The tabs **Disputes**, **LineItems**, **Files**, **Options**, **Settings**, **Fields**, **Users**, **BillingEntities** and **Log**.
+   - The seed lists in **Options** and **BillingEntities** (see [Seed lists](#seed-lists)).
+   - One **Fields** row per field, and the **Settings** rows.
    - A Drive folder named **IDR Prep Studio - Disputes**.
-   - You as the first US desk user and the first admin (only when those lists are empty).
-7. In the **Options** tab:
-   - Add one row per US desk user (`UsDeskUser` in List, their email in Value).
-   - Add one row per admin (`Admin`, email). Admins see the **Lists** screen.
-   - Each December, add next year's federal holidays to the **Holiday** list (Value `YYYY-MM-DD`). The timing rules use them.
-8. **Deploy → New deployment → Web app**. Set **Execute as: Me** and **Who has access: Anyone within your organization**.
-9. Share the web app URL with the team.
+   - You as the first Admin on the **Users** tab.
+7. Optional: run **installTriggers** for the daily cleanup of staged uploads.
+8. Open the web app (next step) and go to **Admin → Users**. Add every LB Member and US Member, with their team.
+9. Each December, add next year's federal holidays to the **Holiday** list (Value `YYYY-MM-DD`). The timing rules use them.
+10. **Deploy → New deployment → Web app**. Set **Execute as: Me** and **Who has access: Anyone within your organization**.
+11. Share the web app URL with the team.
+
+## Upgrade from v3
+
+1. Replace `Code.gs`, `Index.html`, `Pdf.html` (and `DemoData.gs` if you use it).
+2. Run **setup** once, as an admin. It is safe to run again; a second run changes nothing. It:
+   - **Adds the new tabs:** Fields, Users, BillingEntities.
+   - **Adds the new columns:** Options `Key`, `Sort`, `Strict`; Files `LineKey`, `SameClaim`; the new Settings rows. New columns go at the end of an existing tab; the app finds columns by name.
+   - **Renames** the Disputes column `Owner` to `RcmSpecialist`, and the Options list Owner to RcmSpecialist. Before that, the app reads `Owner` as RCM Specialist.
+   - **Creates the Users tab:**
+     - The v3 **Admin** list becomes Admins and the **UsDeskUser** list becomes US Members; those lists are then hidden.
+     - Everyone who created or updated a non-demo dispute becomes an LB Member, because in v3 the whole Workspace could prepare disputes.
+     - If there is still no Admin, the person running setup becomes one.
+     - **Check Admin → Users afterwards:** add missing people, and set teams.
+   - **Moves billing entities** from the Options tab to the BillingEntities tab, with profiles, counts and aliases (aliases go into the Aliases column).
+   - **Gives the portal options their Key, Sort and Strict**, and seeds the new lists: YesNo, BundledPayment, ItemType, LineType, NipMethod, IdreStatus.
+3. **Deploy → Manage deployments → Edit → New version**, so the same URL picks up the change.
+4. Optional: run **installTriggers**.
 
 ## Upgrade from v2
+
+Run the v4 `setup`: it does the v2 to v3 upgrade below and the v3 to v4 upgrade in one go.
 
 1. Replace `Code.gs`, `Index.html`, `Pdf.html` (and `DemoData.gs` if you use it).
 2. Run **setup** once. It is safe to run again; a second run changes nothing. It:
@@ -198,13 +311,13 @@ Copied formats:
 
 | List | Seed |
 | --- | --- |
-| BillingEntity | Our 24 billing entities, exactly as the business spelled them. The first guess for "I am a(n)" comes from the legal form: PLLC = health care provider, LLC = health care facility. It shows a "guess from the name: check it" chip until a saved dispute confirms it. Silver Alliance, LLC (facility) and Capital Health, PLLC (provider, group "Totalcare ER, Cedar Hill") keep their full v2 profiles from the notices. The other profiles are learned on their first save. |
+| BillingEntities tab | Our 24 billing entities, exactly as the business spelled them. The first guess for "I am a(n)" comes from the legal form: PLLC = health care provider, LLC = health care facility. It shows a "guess from the name: check it" chip until a saved dispute confirms it. Silver Alliance, LLC (facility) and Capital Health, PLLC (provider, group "Totalcare ER, Cedar Hill") keep their full v2 profiles from the notices (Confirmed Yes; v2 spellings as Aliases). The other profiles are learned on their first save, or entered in Admin → Billing entities. |
 | Payer | The 124 non-initiating parties (plans, issuers, TPAs) given by the business. UMR, UHC, BCBS and Cigna have address-book profiles from the notices. Aliases: United Healthcare → UHC, BLUECROSS BLUESHIELD → BCBS, Health Now → HealthNow. BENEFITS HEALTHSMART and Healthsmart stay separate. |
 | ServiceCode | 373 codes. Descriptions are seeded only for the 29 codes seen on the notices; the others are learned on first save. |
-| HealthPlanType | The portal's 7 options (strict) |
-| PlanRole, ActingAs, ExtensionReason, DisputeType | The portal's options (reference lists) |
+| HealthPlanType | The portal's 7 options (strict, with Keys) |
+| PlanRole, ActingAs, ExtensionReason, DisputeType, ItemType, LineType, YesNo, BundledPayment, NipMethod, IdreStatus | The portal's options and fixed answers (strict, with Keys and Sort) |
 | IdrEntity, PosCode, Modifier, ReturnReason, Holiday, State | As in v2 (ReturnReason adds "Duplicate line item") |
-| Team, Owner | Learned on save |
+| Team, RcmSpecialist | Learned on save (Add new) |
 
 **Names to confirm with the business.** These are kept exactly as given:
 - "Deerfield plains"
@@ -215,30 +328,33 @@ Copied formats:
 
 Also check that "BENEFITS HEALTHSMART" and "Healthsmart" really are different TPAs.
 
-**Portal characters.** The payer "GEHA (Government Employees Health Association, Inc.)" has parentheses, which the portal rejects in name fields. Use **Fix** when entering it, or rename it in **Lists**.
+**Portal characters.** The payer "GEHA (Government Employees Health Association, Inc.)" has parentheses, which the portal rejects in name fields. Use **Fix** when entering it, or reword it in **Admin → Lists**.
 
 ## The learning system
 
-The **Options** tab is the single source for every list. One row per value:
+The **Options** tab is the single source for every list except the billing entities (their own tab). One row per value:
 
 | Column | What it holds |
 | --- | --- |
 | List | The list name, such as `Payer` or `ServiceCode` |
+| Key | A stable id the rules use, for portal options (blank otherwise) |
 | Value | The value as it is typed into the portal |
 | Label | A display name or description (for service codes, the description) |
-| Data | Address-book profile as JSON (a payer's address, email and phone; a billing entity's I am a(n), whether a saved dispute confirmed it, Tax ID, NPI, group name and contact details); `mergedInto` for aliases |
+| Data | Address-book profile as JSON (a payer's address, email and phone); `mergedInto` for aliases |
 | Count | How many disputes or lines used it |
 | LastUsed | When it was last saved |
 | Source | `seed` (from setup) or `learned` (typed by a user) |
 | Status | `Active`, or `Hidden` (never suggested) |
+| Sort | Display order (portal lists) |
+| Strict | `Yes`: the portal's exact wording, never learned |
 | AddedBy, AddedAt | Who added it and when |
 
 - **Suggestions while typing.** These fields take free typing, with suggestions ranked by Count, then LastUsed:
   - Health insurance plan or company, billing entity, IDRE.
   - Service code, modifiers, place of service.
-  - Team, owner and the return reason.
+  - Team, RCM Specialist (searchable boxes with Add new) and the return reason.
 
-  Health Plan Type and State are strict lists.
+  The strict lists and State never learn new values.
 - **Learn on save.** Every save of a page, a line item, a pasted set of lines or a return adds new values (Source `learned`, Count 1) and adds 1 to the Count of known ones. Saving the same dispute again does not count twice. Address-book lists keep the latest non-empty profile fields.
 - **Address book.**
   - Picking a payer fills its contact fields.
@@ -246,10 +362,13 @@ The **Options** tab is the single source for every list. One row per value:
   - Picking a service code fills the description.
   - Only empty fields are filled, or fields that still hold the previously picked entity's values. **Refill from …** overwrites the rest.
 - **Typo protection.** A value within 2 edits of a known one shows "Did you mean …?" (case, spaces and punctuation are ignored). For example, `SILVER ALLIANCE,LLC` suggests `Silver Alliance, LLC`. Values whose digits differ are never typos of each other.
-- **Learned defaults.** A field's default is the value used most in the last `DefaultWindow` saves, when its share is at least `DefaultShare` and at least 5 records have the field. Otherwise it is the seeded default. Defaults show with a **default** chip.
+- **Learned defaults.** For a field with DefaultMode Learned, the default is the value used most in the last `DefaultWindow` saves, when its share is at least `DefaultShare` and at least 5 records have the field. Otherwise it is the Default column. Fixed and None are set on the Fields tab. Defaults show with a **default** chip.
 
-| Field | Seeded default |
+| Field | Seeded default (mode) |
 | --- | --- |
+| Team | the signed-in user's team (Fixed) |
+| RCM Specialist | the signed-in LB Member's email (Fixed) |
+| Location of Service | TX (Fixed, Locked) |
 | Prior to 1/1/2022? | No |
 | Health Plan Type | Either partially or fully self-insured ERISA group health plan |
 | Consent to waive protections | No |
@@ -272,8 +391,17 @@ The **Settings** tab has one row per key. Edits take effect within a minute.
 | `DefaultWindow` | `50` | How many recent saved disputes (and line items) the learned defaults look at |
 | `DefaultShare` | `0.8` | The share one value needs to become the default (0 to 1; `80%` also works) |
 | `ComplexStates` | empty | States on CMS's Complex State list, comma separated (like `TX, NM`). Lines located in one of them need the state-specific attestation. **Open question:** is TX on the list? |
+| `MaxFileMb` | `45` | Largest file, in MB (1 to 45: the Apps Script limit) |
+| `DisputeMaxMb` | `500` | Total size of a dispute's portal files, in MB (1 to 500: the portal limit) |
+| `GatewayFrom` | `2026-11-13` | Date the web form moves into the IDR Gateway (copy desk banner) |
+| `GatewayBannerUntil` | `2027-01-15` | Last day the IDR Gateway banner shows (the form without sign-in ends that day) |
+| `PortalSessionMinutes` | `60` | The portal's inactivity time-out (copy desk timer) |
+| `PortalWarnMinutes` | `50` | When the copy desk timer warns |
+| `StagingDays` | `7` | Days before staged uploads of never-saved disputes and lines are deleted |
 
-## Training phase, Insights and Lists
+The Settings tab and **Admin → Settings & fields** check every value. An invalid or unknown value is ignored: the default above is used, and a warning shows in Admin.
+
+## Training phase and Insights
 
 - Keep `LearningMode` = `On` for the first weeks.
 - **Insights** (for everyone) shows:
@@ -281,9 +409,7 @@ The **Settings** tab has one row per key. Edits take effect within a minute.
   - The defaults now suggested.
   - The values added this week.
   - Filed disputes whose notice to the non-initiating party was **not sent on the filing day**.
-- **Lists** (for admins) lets you:
-  - Rename, merge, hide or reactivate values.
-  - See values that look like another one, and names the portal would reject (with what Fix would give).
+- **Admin → Lists** lets admins reword, merge, hide or reactivate values, and see values that look like another one and names the portal would reject.
 - Merging moves the uses and the profile into another value and hides the old one. Later saves of the old value count toward the new one.
 
 ## Demo data
@@ -293,7 +419,7 @@ Add `DemoData.gs` as a second script file (**+ → Script**, name it **DemoData*
 | Function | What it does |
 | --- | --- |
 | `seedDemoData` | Creates 12 synthetic disputes, `IDR-DEMO-001` to `IDR-DEMO-012`, with synthetic documents in Drive. Running it again replaces them. |
-| `demoUseLebanonView` / `demoUseUsView` | Switch your account between the Lebanon entry screens and the US copy desk |
+| `demoUseLebanonView` / `demoUseUsView` / `demoUseAdminView` | Change your own role on the Users tab: LB Member (entry screens), US Member (copy desk), or back to Admin. Only an Admin, or the admin who switched away, can use them. Switching back to Admin, or any change an admin makes to that member on the Users tab, ends the switch. |
 | `clearDemoData` | Deletes every `IDR-DEMO-` dispute, its rows and its Drive folder |
 
 The demo data is all synthetic:
@@ -319,12 +445,10 @@ The demo data is all synthetic:
 
 ## Access and data
 
-- Everyone in your Workspace can prepare disputes and see Insights.
-- Only `UsDeskUser` users see the copy desk, mark disputes filed, record the IDR entity selection, or return disputes.
-- Only `Admin` users can change lists in the app.
-- Filed disputes are locked.
+- Only active members on the **Users** tab can open the app; what they can do depends on their role (see [Roles](#roles)). The server checks the role for every action.
+- Filed disputes are locked. LB Members cannot change a dispute once it is with the US desk; the US desk returns it first.
 - Uploaded documents are stored in Drive under the account that deployed the app.
-- Every save, upload, status change and list change is written to the **Log** tab.
+- Every save, upload, status change, list, user, entity, setting and field change is written to the **Log** tab.
 - The seed lists hold business data only: our billing entities, payers, IDR entities and codes. No claim numbers, dates of service or account numbers from the notices are stored in the code, the lists or the demo data.
 
 ## Speed
@@ -333,7 +457,10 @@ The demo data is all synthetic:
 - **Reading:** one request reads every tab a screen needs.
 - **Writing:** each row is written in one call; a pasted set of lines is written in one call too.
 - **Fewer round trips:** every save, upload and status change sends back the updated dispute.
-- **Options cache:** about 650 option rows are cached for 10 minutes in a compact form that stays under the 100 KB cache limit. A save that learns, an admin change, or an edit to the Options or Settings tab clears the cache.
+- **Caches:**
+  - The option rows (Options and BillingEntities, about 650) are cached for 10 minutes, in a compact form that stays under the 100 KB cache limit.
+  - Settings and Fields are cached for 10 minutes, and Users for 2 minutes.
+  - A save that learns, an admin change, or an edit to one of these tabs clears the matching cache.
 
 ## Limits and open questions
 
@@ -342,5 +469,6 @@ The demo data is all synthetic:
 - **Prepared ahead.** A dispute can go to the US desk before day 31, but it can only be filed from day 31. After day 34 it needs an extension reason to go to the US desk at all.
 - **Alert texts.** The guide shows the portal's alerts for "prior to 1/1/2022" and "consent to waive" only as pictures. The Studio uses its own wording.
 - **Batches with several start dates.** The open negotiation start date is entered once per dispute, as in the portal. The Studio cannot check that a notice was uploaded for each distinct start date.
-- **Files.** Each file must be under 45 MB (Apps Script).
+- **Files.** Each file must be under `MaxFileMb` (at most 45 MB, the Apps Script limit).
+- **Fields labels after code updates.** `setup` never changes existing Fields rows, so a reworded built-in label in a future version must be applied on the Fields tab (or the row deleted and `setup` run again).
 - **Holidays.** The holiday list must be extended each year (2026 and 2027 are seeded).
