@@ -30,7 +30,7 @@ const LOGO_URL = 'https://drive.google.com/thumbnail?id=18bqSCdjITeFAI8RmT6EAngD
 const SHEET_ID = ''; // leave empty when the script is bound to the Sheet
 
 const TABS = { disputes: 'Disputes', lines: 'LineItems', files: 'Files', options: 'Options', settings: 'Settings', log: 'Log',
-  fields: 'Fields', users: 'Users', entities: 'BillingEntities' };
+  fields: 'Fields', users: 'Users', entities: 'BillingEntities', access: 'AccessRequests' };
 
 const STATUS = { draft: 'Draft', ready: 'Ready for US desk', filed: 'Filed', returned: 'Returned' };
 
@@ -49,6 +49,11 @@ const ALL_ROLES = [ROLES.admin, ROLES.lb, ROLES.us];
 
 const USER_COLS = ['Email', 'Name', 'Role', 'Team', 'Active', 'AddedBy', 'AddedAt', 'Notes'];
 
+// Access requests from people who are not (or no longer) active members. Status: Pending, Approved or Rejected.
+const ACCESS_COLS = ['Email', 'Name', 'Team', 'Notes', 'RequestedAt', 'Status', 'Role', 'DecidedBy', 'DecidedAt', 'DecisionNote'];
+
+const ACCESS_STATUS = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' };
+
 // Billing entities (initiating party address book). Data keys used by the profile fill and the client.
 const ENTITY_COLS = ['Name', 'ActingAs', 'TIN', 'NPI', 'GroupName', 'Addr1', 'Addr2', 'City', 'State', 'ZIP', 'Email', 'Phone', 'Fax',
   'Confirmed', 'Status', 'Count', 'LastUsed', 'AddedBy', 'AddedAt', 'Notes', 'Aliases'];
@@ -64,7 +69,8 @@ const DEFAULT_MODES = ['Fixed', 'Learned', 'None'];
 
 // Settings tab (Key | Value | Note). These apply when a key is missing or its value is not valid.
 const SETTING_DEFAULTS = { LearningMode: 'On', DefaultWindow: 50, DefaultShare: 0.8, ComplexStates: '', MaxFileMb: 45, DisputeMaxMb: 500,
-  GatewayFrom: '2026-11-13', GatewayBannerUntil: '2027-01-15', PortalSessionMinutes: 60, PortalWarnMinutes: 50, StagingDays: 7 };
+  GatewayFrom: '2026-11-13', GatewayBannerUntil: '2027-01-15', PortalSessionMinutes: 60, PortalWarnMinutes: 50, StagingDays: 7,
+  NotifyAdminsOnRequest: 'Yes', NotifyRequester: 'Yes' };
 
 const SETTING_NOTES = {
   LearningMode: 'On: new values typed by users are active at once (training). Off: they are added as Hidden until an admin activates them.',
@@ -77,7 +83,9 @@ const SETTING_NOTES = {
   GatewayBannerUntil: 'Last day the IDR Gateway banner shows on the copy desk (the form without sign-in ends that day), YYYY-MM-DD.',
   PortalSessionMinutes: 'The portal session times out after this many minutes of inactivity (copy desk timer).',
   PortalWarnMinutes: 'The copy desk timer warns after this many minutes.',
-  StagingDays: 'Files uploaded to a dispute or line that was never saved are deleted after this many days.'
+  StagingDays: 'Files uploaded to a dispute or line that was never saved are deleted after this many days.',
+  NotifyAdminsOnRequest: 'Yes: active Admins get an email when someone requests access.',
+  NotifyRequester: 'Yes: the person who requested access gets an email when an Admin approves or rejects it.'
 };
 
 const MIN_DEFAULT_SAMPLE = 5; // a learned default needs at least this many saved records
@@ -138,6 +146,11 @@ const BUILTIN_LISTS = {
   IdrEntity: [['', 'Maximus Federal Services Inc'], ['', 'Capitol Bridge LLC'], ['', 'Federal Hearings and Appeals Services, LLC']]
 };
 
+// The option Keys the code's rules use (conditions, derived values, defaults set by the app). A value carrying one of
+// them cannot be removed, re-keyed or hidden unless another active value of its list carries the same Key.
+const RULE_KEYS = { YesNo: ['yes'], BundledPayment: ['yes'], HealthPlanType: ['individual', 'fehb'], PlanRole: ['group', 'individual', 'fehb'],
+  DisputeType: ['single', 'batched'], ExtensionReason: ['approval', 'cooling'], ItemType: ['emergency', 'other'],
+  LineType: ['bundled', 'component'], IdreStatus: ['pending'] };
 // Lists whose exact text must match the portal (plus the fixed answer lists): Strict = Yes, never learned.
 const STRICT_LISTS = ['HealthPlanType', 'PlanRole', 'ActingAs', 'ExtensionReason', 'ItemType', 'DisputeType', 'LineType',
   'YesNo', 'BundledPayment', 'NipMethod', 'IdreStatus'];
@@ -635,14 +648,15 @@ function lineTypeFor_(kind, index) {
 // ------------------------------------------------------------------ web app
 
 function doGet() {
-  // Only active members on the Users tab get the app.
+  // Only active members on the Users tab get the app; anyone else gets the access request page.
   let u = null;
   try { u = me_(); } catch (e) { u = null; }
   if (!u) {
-    return HtmlService.createHtmlOutput('<div style="font-family:Arial,sans-serif;max-width:560px;margin:60px auto;color:#003B5C">' +
-      '<h2>Access not granted</h2><p>Your account (' + escHtml_(currentUser_()) + ') is not an active member of ' + escHtml_(APP_NAME) + '.</p>' +
-      '<p>Ask an admin to add you on the Users tab.</p><p style="color:#6B4A00;background:#FEF3DC;padding:8px">Internal preparation tool. It is not the CMS portal.</p></div>')
-      .setTitle(APP_NAME);
+    const email = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+    let req = null;
+    try { req = email ? accessRequestOf_(email) : null; } catch (e) { req = null; }
+    return HtmlService.createHtmlOutput(accessPageHtml_(email, req)).setTitle(APP_NAME)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
   const t = HtmlService.createTemplateFromFile('Index');
   t.LOGO_URL = LOGO_URL;
@@ -657,8 +671,151 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
+/**
+ * The page for someone who is not an active member: a form to request access (email from the signed-in account), or the
+ * status of their pending request, or a sign-in message when the session has no email.
+ */
+function accessPageHtml_(email, req) {
+  const css = 'body{font-family:Arial,sans-serif;background:#F8FAFC;color:#003B5C;margin:0}main{max-width:560px;margin:40px auto;padding:0 16px}' +
+    '.card{background:#fff;border:1px solid #DCE3EA;border-radius:12px;padding:22px}label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}' +
+    'input,textarea{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #C5D0DA;border-radius:8px;font:inherit}input[readonly]{background:#EEF2F6}' +
+    'button{margin-top:16px;font:inherit;font-weight:700;border:0;border-radius:8px;padding:10px 16px;background:#003B5C;color:#fff;cursor:pointer}' +
+    '.note{background:#FEF3DC;color:#6B4A00;padding:8px 10px;border-radius:8px;font-size:13px;margin-top:16px}.ok{background:#E3F8F0;color:#0B7A57;padding:10px 12px;border-radius:8px}' +
+    '.err{color:#E31B23;font-size:13px;margin-top:8px}.req{color:#E31B23}';
+  let body;
+  if (!email) {
+    body = '<h2>Sign in</h2><p>Sign in with your organization Google account to use ' + escHtml_(APP_NAME) + ' or to request access.</p>';
+  } else {
+    const pending = req && req.Status === ACCESS_STATUS.pending;
+    const rejected = req && req.Status === ACCESS_STATUS.rejected;
+    body = '<h2>' + escHtml_(APP_NAME) + '</h2><p>You don’t have access to the IDR Prep Studio. If you need access, request it from an Admin.</p>' +
+      '<div id="status">' + (pending ? '<div class="ok">Request sent on ' + escHtml_(String(req.RequestedAt).slice(0, 10)) + '. An Admin will review it. You can update it below.</div>' : '') +
+      (rejected ? '<div class="note">Your last request was not approved' + (req.DecisionNote ? ': ' + escHtml_(req.DecisionNote) : '') + '. You can request again.</div>' : '') + '</div>' +
+      '<form id="f"><label>Email</label><input name="email" value="' + escHtml_(email) + '" readonly>' +
+      '<label>Full name <span class="req">*</span></label><input name="name" maxlength="80" required value="' + escHtml_(pending ? req.Name : '') + '">' +
+      '<label>Team name <span class="req">*</span></label><input name="team" maxlength="60" required value="' + escHtml_(pending ? req.Team : '') + '">' +
+      '<label>Notes (optional)</label><textarea name="notes" maxlength="500" rows="3">' + escHtml_(pending ? req.Notes : '') + '</textarea>' +
+      '<button type="submit" id="send">' + (pending ? 'Update request' : 'Request access') + '</button><div class="err" id="err"></div></form>' +
+      '<script>(function () {' +
+      'var f = document.getElementById("f"), err = document.getElementById("err"), btn = document.getElementById("send");' +
+      'f.addEventListener("submit", function (e) { e.preventDefault(); err.textContent = ""; btn.disabled = true;' +
+      'google.script.run.withSuccessHandler(function () { btn.disabled = false; btn.textContent = "Update request";' +
+      'document.getElementById("status").innerHTML = "<div class=\\"ok\\">Request sent. An Admin will review it.</div>"; })' +
+      '.withFailureHandler(function (x) { btn.disabled = false; err.textContent = x && x.message ? x.message : String(x); })' +
+      '.requestAccess({ name: f.name.value, team: f.team.value, notes: f.notes.value }); });' +
+      '})();</script>';
+  }
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' + css + '</style></head><body><main><div class="card">' + body +
+    '<div class="note">Internal preparation tool. It is not the CMS portal.</div></div></main></body></html>';
+}
+
 function escHtml_(v) {
   return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+}
+
+// ------------------------------------------------------------------ access requests
+
+/** The latest request of an email (Pending first), as a row with its sheet row number, or null. */
+function accessRequestOf_(email) {
+  if (!ss_().getSheetByName(TABS.access)) return null;
+  let best = null;
+  table_(TABS.access).rows.forEach(function (r, i) {
+    if (String(r.Email || '').trim().toLowerCase() !== email) return;
+    const rec = Object.assign({ rowNum: i + 2 }, r);
+    if (!best || (r.Status === ACCESS_STATUS.pending && best.Status !== ACCESS_STATUS.pending) ||
+        (best.Status !== ACCESS_STATUS.pending && String(r.RequestedAt) >= String(best.RequestedAt))) best = rec;
+  });
+  return best;
+}
+
+/**
+ * The only server function people who are not active members can call: asks for access. form: { name, team, notes? }.
+ * The email is the signed-in account's. One pending request per email (sending again updates it). Active Admins are
+ * emailed when NotifyAdminsOnRequest is Yes (a failed email is logged, never blocking). Returns { status, requestedAt }.
+ */
+function requestAccess(form) {
+  const email = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  if (!email) throw new Error('Sign in with your organization Google account to request access.');
+  if (userOf_(email)) throw new Error('You already have access. Reload the page.');
+  form = form || {};
+  const name = String(form.name == null ? '' : form.name).trim();
+  const team = String(form.team == null ? '' : form.team).trim();
+  const notes = String(form.notes == null ? '' : form.notes).trim();
+  const problems = [];
+  if (!name) problems.push('Enter your full name.');
+  else if (name.length > 80) problems.push('The name can have at most 80 characters.');
+  else if (badChars_('name', name).length) problems.push('The name has characters that are not accepted: ' + badChars_('name', name).join(' '));
+  if (!team) problems.push('Enter your team name.');
+  else if (team.length > 60) problems.push('The team name can have at most 60 characters.');
+  else if (badChars_('name', team).length) problems.push('The team name has characters that are not accepted: ' + badChars_('name', team).join(' '));
+  if (notes.length > 500) problems.push('Notes can have at most 500 characters.');
+  if (problems.length) throw new Error(problems.join(' '));
+  if (!ss_().getSheetByName(TABS.access)) throw new Error('Access requests are not set up yet. Ask an Admin to run setup.');
+  const now = nowStr_();
+  const isNew = withLock_(function () {
+    const cur = accessRequestOf_(email);
+    const rec = { Email: email, Name: safe_(name), Team: safe_(team), Notes: safe_(notes), RequestedAt: now, Status: ACCESS_STATUS.pending,
+      Role: '', DecidedBy: '', DecidedAt: '', DecisionNote: '' };
+    if (cur && cur.Status === ACCESS_STATUS.pending) writeRecord_(TABS.access, cur.rowNum, Object.assign(rowAt_(TABS.access, cur.rowNum), rec));
+    else appendRecords_(TABS.access, [rec]);
+    log_('', 'access-request', email + ' (' + name + ', ' + team + ')' + (cur && cur.Status === ACCESS_STATUS.pending ? ' updated' : ''));
+    return !(cur && cur.Status === ACCESS_STATUS.pending);
+  });
+  if (isNew && yes_(getSettings_().NotifyAdminsOnRequest)) {
+    const admins = activeUsers_().filter(function (u) { return u.Role === ROLES.admin; }).map(function (u) { return u.Email; });
+    sendMail_(admins, APP_NAME + ': access request from ' + name,
+      name + ' (' + email + '), team ' + team + ', asks for access to ' + APP_NAME + '.' + (notes ? '\n\nNotes: ' + notes : '') +
+      '\n\nApprove or reject it in the app: Admin > Users > Requests.');
+  }
+  return { status: ACCESS_STATUS.pending, requestedAt: now };
+}
+
+/** Sends a plain email; a failure is written to the Log and never blocks the action. */
+function sendMail_(to, subject, body) {
+  to = [].concat(to).filter(String);
+  if (!to.length) return false;
+  try {
+    MailApp.sendEmail({ to: to.join(','), subject: subject, body: body });
+    return true;
+  } catch (e) {
+    try { log_('', 'mail-failed', subject + ': ' + e.message); } catch (e2) { /* nothing else to do */ }
+    return false;
+  }
+}
+
+/**
+ * Approves or rejects the pending access request of an email. decision: { approve: true, role, team? } adds or
+ * reactivates the Users row (the last-Admin rule still applies), or { approve: false, note? }. The requester is
+ * emailed when NotifyRequester is Yes. Returns the Users list again.
+ */
+function adminDecideAccess(email, decision) {
+  const me = requireRole_(ROLES.admin);
+  email = String(email || '').trim().toLowerCase();
+  decision = decision || {};
+  const req = accessRequestOf_(email);
+  if (!req || req.Status !== ACCESS_STATUS.pending) throw new Error('No pending access request for ' + email + '.');
+  const note = String(decision.note == null ? '' : decision.note).trim();
+  if (note.length > 500) throw new Error('The note can have at most 500 characters.');
+  let role = '';
+  if (decision.approve) {
+    role = ALL_ROLES.filter(function (r) { return r.toLowerCase() === String(decision.role || '').trim().toLowerCase(); })[0];
+    if (!role) throw new Error('Pick a role: ' + ALL_ROLES.join(', ') + '.');
+    saveUser_({ email: email, name: req.Name, role: role, team: decision.team == null ? req.Team : decision.team, active: true,
+      notes: 'Access request approved' + (note ? ': ' + note : '') }, me);
+  }
+  withLock_(function () {
+    const cur = accessRequestOf_(email);
+    writeRecord_(TABS.access, cur.rowNum, Object.assign(rowAt_(TABS.access, cur.rowNum), {
+      Status: decision.approve ? ACCESS_STATUS.approved : ACCESS_STATUS.rejected, Role: role, DecidedBy: me.Email, DecidedAt: nowStr_(),
+      DecisionNote: safe_(note) }));
+    log_('', 'access-' + (decision.approve ? 'approved' : 'rejected'), email + (role ? ': ' + role : '') + (note ? ' (' + note + ')' : ''));
+  });
+  if (yes_(getSettings_().NotifyRequester)) {
+    sendMail_(email, APP_NAME + ': access ' + (decision.approve ? 'approved' : 'not approved'), decision.approve
+      ? 'Your access to ' + APP_NAME + ' was approved (' + role + '). Open the app link again to start.'
+      : 'Your request for access to ' + APP_NAME + ' was not approved' + (note ? ': ' + note : '.') + '\n\nYou can request again from the app link.');
+  }
+  return listUsers_();
 }
 
 function getBootstrap(withList) {
@@ -1649,19 +1806,22 @@ function adminListOptions(list) {
   const activeValues = mine.filter(function (r) { return r.Status !== HIDDEN; }).map(function (r) { return r.Value; });
   out.list = list;
   out.strict = !!(summary[list] && summary[list].strict);
+  out.custom = codeLists_().indexOf(list) === -1;
+  const usage = optionUsage_(list);
   out.rows = mine.map(function (r) {
     const data = parseData_(r.Data);
     return {
       key: r.Key || '', value: r.Value, label: r.Label, data: data, count: Number(r.Count) || 0, lastUsed: r.LastUsed, source: r.Source,
       status: r.Status || ACTIVE, sort: r.Sort, addedBy: r.AddedBy, addedAt: r.AddedAt, mergedInto: data.mergedInto || '',
-      similar: closestOption_(activeValues.filter(function (v) { return v !== r.Value; }), r.Value)
+      similar: closestOption_(activeValues.filter(function (v) { return v !== r.Value; }), r.Value), used: usage[r.Value] || 0,
+      ruleKey: !!(r.Key && (RULE_KEYS[list] || []).indexOf(r.Key) !== -1)
     };
   }).sort(function (a, b) { return out.strict ? (Number(a.sort) || 0) - (Number(b.sort) || 0) : b.count - a.count; });
   return out;
 }
 
 /**
- * change: { label?, status?: 'Active' | 'Hidden', mergeInto?, value?, sort? }. Merging moves the count and the
+ * change: { label?, status?: 'Active' | 'Hidden', mergeInto?, value?, sort?, key? }. Merging moves the count and the
  * profile into another value (created if it does not exist, which is how a value is renamed) and hides this one;
  * later saves of the old value count toward the new one. value rewords an option in place, keeping its Key (strict
  * lists: the portal changed its wording). Returns the list again.
@@ -1685,6 +1845,17 @@ function updateOption_(list, value, change) {
     const dirty = {};
     const adds = [];
     if (change.label != null) rec.Label = safe_(change.label);
+    if (change.key != null && String(change.key).trim() !== String(rec.Key || '')) {
+      const nk = String(change.key).trim();
+      if (nk && !/^[a-z0-9_]{1,40}$/.test(nk)) throw new Error('A Key uses lower-case letters, digits and _ only.');
+      const why = keyNeeded_(list, rec, t.rows, idx);
+      if (why) throw new Error(why);
+      rec.Key = nk;
+    }
+    if (change.status === HIDDEN && rec.Status !== HIDDEN) {
+      const why = keyNeeded_(list, rec, t.rows, idx) || lastStrict_(list, rec, t.rows, idx);
+      if (why) throw new Error(why);
+    }
     if (change.sort != null) {
       if (String(change.sort).trim() !== '' && !isFinite(Number(change.sort))) throw new Error('Sort must be a number.');
       rec.Sort = String(change.sort).trim();
@@ -1741,6 +1912,120 @@ function updateOption_(list, value, change) {
 
 // ---- Users admin
 
+// Lists the app's code relies on (they cannot be deleted as custom lists).
+function codeLists_() {
+  const out = Object.keys(BUILTIN_LISTS).concat(['State', 'Holiday', 'Payer', 'ServiceCode', 'Team', 'RcmSpecialist', 'BillingEntity'], PRIVATE_LISTS);
+  schemaSections_(baseSchema_()).forEach(function (sec) { sec.fields.forEach(function (f) { if (typeof f.options === 'string') out.push(f.options); }); });
+  return out;
+}
+
+/** Why a row's Key cannot go away (the rules use it and no other active row of the list carries it), or ''. */
+function keyNeeded_(list, rec, rows, idx) {
+  const key = String(rec.Key || '').trim();
+  if (!key || (RULE_KEYS[list] || []).indexOf(key) === -1) return '';
+  const other = rows.some(function (r, i) { return i !== idx && r.List === list && String(r.Key || '').trim() === key && r.Status !== HIDDEN; });
+  return other ? '' : 'The app’s rules use the Key "' + key + '" of ' + list + '. Give another active value this Key first, or reword this value instead.';
+}
+
+/** Why a row cannot leave its strict list without an active value, or ''. */
+function lastStrict_(list, rec, rows, idx) {
+  if (!yes_(rec.Strict) && !isStrictList_(list)) return '';
+  const other = rows.some(function (r, i) { return i !== idx && r.List === list && r.Status !== HIDDEN; });
+  return other ? '' : list + ' is a strict list and needs at least one active value.';
+}
+
+/** How many saved disputes and line items use each value of a list: { value: count }. */
+function optionUsage_(list) {
+  const t = readTables_([TABS.disputes, TABS.lines]);
+  const s = baseSchema_();
+  const out = {};
+  const scan = function (fields, recs) {
+    fields.filter(function (f) { return f.options === list; }).forEach(function (f) {
+      recs.forEach(function (r) {
+        const v = String(r[f.key] == null ? '' : r[f.key]).trim();
+        if (!v) return;
+        (f.multi ? splitMulti_(v) : f.type === 'checkboxes' ? v.split(/;\s*/) : [v]).forEach(function (x) { out[x] = (out[x] || 0) + 1; });
+      });
+    });
+  };
+  scan(headerFields_(s).concat(s.internal), rows_(t[0]));
+  scan(lineFields_(s), rows_(t[1]));
+  return out;
+}
+
+/**
+ * Adds a value to a list (strict lists too), or starts a new list. option: { value, label?, key?, sort? }. A new list
+ * name uses letters and digits (like MyList). Returns the list again.
+ */
+function adminAddOption(list, option) {
+  const me = requireRole_(ROLES.admin);
+  list = String(list || '').trim();
+  option = option || {};
+  const value = String(option.value == null ? '' : option.value).trim();
+  const key = String(option.key == null ? '' : option.key).trim();
+  const sort = String(option.sort == null ? '' : option.sort).trim();
+  if (!/^[A-Za-z][A-Za-z0-9]{1,40}$/.test(list)) throw new Error('A list name uses letters and digits only, like MyList.');
+  if (list === 'BillingEntity' || PRIVATE_LISTS.indexOf(list) !== -1) throw new Error('That list is managed elsewhere (Billing entities, Users).');
+  if (!value) throw new Error('Enter the value.');
+  if (key && !/^[a-z0-9_]{1,40}$/.test(key)) throw new Error('A Key uses lower-case letters, digits and _ only.');
+  if (sort && !isFinite(Number(sort))) throw new Error('Sort must be a number.');
+  withLock_(function () {
+    const rows = table_(TABS.options).rows.filter(function (r) { return r.List === list; });
+    const same = rows.filter(function (r) { return optionKey_(r.Value) === optionKey_(value); })[0];
+    if (same) throw new Error(list + ' already has "' + same.Value + '"' + (same.Status === HIDDEN ? ' (hidden: activate it instead)' : '') + '.');
+    const strict = rows.length ? rows.some(function (r) { return yes_(r.Strict); }) : STRICT_LISTS.indexOf(list) !== -1;
+    appendRecords_(TABS.options, [optionRecord_(list, value, { label: safe_(option.label || ''), key: key, sort: sort, strict: strict,
+      source: 'admin', status: ACTIVE, addedBy: me.Email })]);
+    log_('', 'option', list + ': added "' + value + '"' + (rows.length ? '' : ' (new list)'));
+  });
+  clearOptionsCache_();
+  clearConfigCache_();
+  return adminListOptions(list);
+}
+
+/**
+ * Removes a value from a list (deletes its Options row). Refused when the app's rules need its Key and no other active
+ * value carries it, or when a strict list would be left without an active value. A value used on saved disputes can
+ * still be removed (they keep the text); the result's warning says how many. Returns the list again, with warning.
+ */
+function adminRemoveOption(list, value) {
+  requireRole_(ROLES.admin);
+  let warning = '';
+  withLock_(function () {
+    const t = table_(TABS.options);
+    const idx = t.rows.findIndex(function (r) { return r.List === list && r.Value === value; });
+    if (idx === -1) throw new Error('Not found in ' + list + ': ' + value);
+    const rec = t.rows[idx];
+    const why = keyNeeded_(list, rec, t.rows, idx) || (rec.Status !== HIDDEN ? lastStrict_(list, rec, t.rows, idx) : '');
+    if (why) throw new Error(why);
+    const used = optionUsage_(list)[value] || 0;
+    if (used) warning = '"' + value + '" was used on ' + used + ' saved dispute(s) or line item(s); they keep the text.';
+    let done = false;
+    deleteWhere_(TABS.options, function (r) { if (done || r.List !== list || r.Value !== value) return false; done = true; return true; });
+    log_('', 'option', list + ': removed "' + value + '"' + (used ? ' (used ' + used + ' time(s))' : ''));
+  });
+  clearOptionsCache_();
+  clearConfigCache_();
+  const out = adminListOptions(list);
+  out.warning = warning;
+  return out;
+}
+
+/** Deletes a custom list (one the app's code does not use) that has no active value. Returns the list names. */
+function adminDeleteList(list) {
+  requireRole_(ROLES.admin);
+  if (codeLists_().indexOf(list) !== -1) throw new Error(list + ' is used by the app and cannot be deleted.');
+  withLock_(function () {
+    const rows = table_(TABS.options).rows.filter(function (r) { return r.List === list; });
+    if (!rows.length) throw new Error('No list named ' + list + '.');
+    if (rows.some(function (r) { return r.Status !== HIDDEN; })) throw new Error('Remove or hide every value of ' + list + ' first.');
+    deleteWhere_(TABS.options, function (r) { return r.List === list; });
+    log_('', 'option', 'list ' + list + ' deleted');
+  });
+  clearOptionsCache_();
+  return adminListOptions('');
+}
+
 /** Every member (active or not). */
 function adminListUsers() {
   requireRole_(ROLES.admin);
@@ -1748,8 +2033,15 @@ function adminListUsers() {
 }
 
 function listUsers_() {
+  const reqs = ss_().getSheetByName(TABS.access) ? rows_(table_(TABS.access)) : [];
   return { roles: ALL_ROLES, users: usersAll_().map(function (u) {
     return { email: u.Email, name: u.Name, role: u.Role, team: u.Team, active: u.Active, notes: u.Notes };
+  }), requests: reqs.map(function (r) {
+    return { email: r.Email, name: r.Name, team: r.Team, notes: r.Notes, requestedAt: r.RequestedAt, status: r.Status, role: r.Role,
+      decidedBy: r.DecidedBy, decidedAt: r.DecidedAt, note: r.DecisionNote };
+  }).sort(function (a, b) {
+    const pa = a.status === ACCESS_STATUS.pending ? 0 : 1, pb = b.status === ACCESS_STATUS.pending ? 0 : 1;
+    return (pa - pb) || (String(b.requestedAt) > String(a.requestedAt) ? 1 : -1);
   }) };
 }
 
@@ -1759,6 +2051,12 @@ function listUsers_() {
  */
 function adminSaveUser(user) {
   const me = requireRole_(ROLES.admin);
+  saveUser_(user, me);
+  return listUsers_(); // no second role check: an admin may have just changed their own role
+}
+
+// The change itself (also used when an access request is approved). me: the admin making it.
+function saveUser_(user, me) {
   user = user || {};
   const email = String(user.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Enter a valid email.');
@@ -1791,7 +2089,6 @@ function adminSaveUser(user) {
     const props = PropertiesService.getScriptProperties();
     if (props.getProperty('DEMO_SWITCH_EMAIL') === email) props.deleteProperty('DEMO_SWITCH_EMAIL');
   });
-  return listUsers_(); // no second role check: an admin may have just changed their own role
 }
 
 // ---- Billing entities admin
@@ -1906,6 +2203,7 @@ function settingProblem_(key, value) {
     case 'PortalSessionMinutes': return num(5, 240) ? '' : 'must be a number of minutes from 5 to 240';
     case 'PortalWarnMinutes': return num(1, 239) ? '' : 'must be a number of minutes from 1 to 239';
     case 'StagingDays': return num(1, 90) ? '' : 'must be a number of days from 1 to 90';
+    case 'NotifyAdminsOnRequest': case 'NotifyRequester': return /^(yes|no)$/i.test(v) ? '' : 'must be Yes or No';
     default: return 'is not a known setting';
   }
 }
@@ -2538,7 +2836,7 @@ function filesOf_(id) {
   return rows_(table_(TABS.files)).filter(function (f) { return f.DisputeID === id; });
 }
 
-const STAMP_COLS = ['CreatedAt', 'UpdatedAt', 'ReadyAt', 'FiledAt', 'UploadedAt', 'Timestamp', 'LastUsed', 'AddedAt'];
+const STAMP_COLS = ['CreatedAt', 'UpdatedAt', 'ReadyAt', 'FiledAt', 'UploadedAt', 'Timestamp', 'LastUsed', 'AddedAt', 'RequestedAt', 'DecidedAt'];
 
 let FIELD_TYPES_ = null;
 
@@ -2758,7 +3056,9 @@ function currentUser_() {
 let OPTION_ROWS_ = null;
 
 let OPTIONS_ = null;
+
 let ACTIVE_BY_ = null; // activeByList_ for this server call
+
 let STRICT_ = null; // { list: true } for this server call
 
 const OPTION_CACHE_COLS = ['List', 'Value', 'Label', 'Data', 'Count', 'LastUsed', 'Source', 'Status', 'AddedAt', 'Key', 'Sort', 'Strict'];
@@ -3000,6 +3300,7 @@ function setup() {
   ensure(TABS.fields, FIELD_COLS);
   ensure(TABS.users, USER_COLS);
   ensure(TABS.entities, ENTITY_COLS);
+  ensure(TABS.access, ACCESS_COLS);
 
   // Send queued SpreadsheetApp changes before anything reads the tabs through the Sheets API.
   SpreadsheetApp.flush();
@@ -3263,7 +3564,7 @@ function seedEntities_() {
   seedEntityRows_().forEach(function (seed) {
     const i = at[optionKey_(seed.Name)];
     if (i === undefined) { add.push(seed); return; }
-    // Existing row: fill blank profile columns; an unconfirmed acting-as guess gives way to the business's value.
+    // Existing row: fill blank profile columns; an unconfirmed I am a(n) gives way to the business's value.
     const r = rows[i], rec = Object.assign({}, r);
     let changed = false;
     ENTITY_PROFILE_COLS.forEach(function (c) {
@@ -3356,7 +3657,6 @@ function migrateRecordsV3_() {
 const US_STATES = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY',
   'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA',
   'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'AS', 'GU', 'MP', 'PR', 'VI'];
-
 
 // Non-initiating parties (plans, issuers, TPAs), as given by the business.
 const SEED_PAYERS = [
@@ -3501,7 +3801,9 @@ const SEED_ENTITY_PROFILES = [
   ['Everwell Medical, PLLC', 'provider', '392402475', '1457228496', 'Sachse', 'Sachse.negotiations@karisbilling.us'],
   ['Gracious Health, LLC', 'facility', '392489677', '1649146580', 'Sachse', 'Sachse.negotiations@karisbilling.us']
 ];
+
 const SEED_ENTITY_CONTACT = { Addr1: '6049 S. Hulen St.', Addr2: '', City: 'Fort Worth', State: 'TX', ZIP: '76132', Phone: '(817) 566-1232', Fax: '' };
+
 // Profile columns setup() fills on existing rows when they are still blank.
 const ENTITY_PROFILE_COLS = ['ActingAs', 'TIN', 'NPI', 'GroupName', 'Addr1', 'Addr2', 'City', 'State', 'ZIP', 'Email', 'Phone', 'Fax'];
 

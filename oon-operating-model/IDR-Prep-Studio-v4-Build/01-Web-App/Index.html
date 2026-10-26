@@ -95,6 +95,7 @@
     .steps button { background: #E6EEF3; color: var(--text-2); font-size: 12px; padding: 8px 6px; border-radius: 8px; }
     .steps button.on { background: var(--primary-cyan); color: var(--white); }
     .steps button.done { background: var(--navy-tint, #D7E4EC); color: var(--primary-navy); }
+    .steps button.locked { opacity: .55; cursor: not-allowed; }
     .mirror { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--primary-cyan); margin-bottom: 4px; }
     .req-note { font-size: 13px; color: var(--text-2); margin: 0 0 14px; }
     .req { color: var(--functional-red); font-weight: 700; }
@@ -833,7 +834,7 @@
         var auto = f.auto ? autoValue(f, rec) : null;
         var locked = auto && auto.confirmed && editable() && !S.unlocked[f.key] && (isEmpty(v) || String(v) === auto.value);
         if (locked && isEmpty(v)) { rec[f.key] = auto.value; v = auto.value; picked = [v]; if (rec === S.d) S.pending[f.key] = v; }
-        if (auto && !auto.confirmed && String(v) === auto.value) label += '<span class="chip guess" title="First guess from the legal name: PLLC = provider, LLC = facility">guess from the name: check it</span>';
+        if (auto && !auto.confirmed && String(v) === auto.value) label += '<span class="chip guess" title="This billing entity was added from a saved dispute and is not confirmed yet">not confirmed: check it</span>';
         h += '<div class="lbl">' + label + '</div>';
         if (locked) {
           h += '<div class="locked"><span class="lock">Locked</span><span data-locked-value>' + esc(v) + '</span><span class="muted" style="font-weight:400">from ' + esc(auto.from) +
@@ -1119,7 +1120,7 @@
       if (!known) hint.textContent = 'New value: it is added to the list when you save.';
     }
 
-    // I am a(n) always follows the billing entity picked: locked when a saved dispute confirmed it, a guess to check otherwise.
+    // I am a(n) always follows the billing entity picked: locked when the entity is confirmed, to check otherwise (entities learned from a dispute).
     function syncEntityAuto(container, entity) {
       var box = container.querySelector('.f[data-key="q_acting_as"]');
       if (!box || S.unlocked.q_acting_as) return;
@@ -1139,7 +1140,7 @@
       } else {
         if (lock) lock.classList.add('hidden');
         choices.classList.remove('hidden');
-        if (!auto.confirmed) lbl.insertAdjacentHTML('beforeend', '<span class="chip guess" title="First guess from the legal name: PLLC = provider, LLC = facility">guess from the name: check it</span>');
+        if (!auto.confirmed) lbl.insertAdjacentHTML('beforeend', '<span class="chip guess" title="This billing entity was added from a saved dispute and is not confirmed yet">not confirmed: check it</span>');
       }
       box.classList.remove('err');
       box.querySelector('.msg').textContent = '';
@@ -1219,6 +1220,81 @@
       var all = [];
       for (var k = 0; k < 6; k++) all = all.concat(pageIssues(k));
       return all;
+    }
+
+    // Moving forward (Continue, Ctrl+Enter, a later step) is allowed only up to the first page with issues, and never
+    // past a line being edited. Returns null when the move is allowed, else { page, message, dirty? }. Back is never
+    // blocked, nor are read-only disputes. Notices (like "Filing window opens") are warnings, not issues. The server
+    // checks everything again when the dispute is sent to the US desk.
+    function forwardBlock(target) {
+      if (target <= S.page || !editable()) return null;
+      if (S.page === 4 && lineDirty()) return { page: 4, dirty: true, message: 'Save or discard the line you are editing.' };
+      if (S.page === 4 && S.paste !== null && String(S.paste.text || '').trim()) {
+        return { page: 4, message: 'Add the pasted lines or cancel the paste before you continue.' };
+      }
+      for (var k = 0; k < target; k++) {
+        var list = pageIssues(k);
+        if (list.length) return { page: k, message: 'Page ' + (k + 1) + ' has ' + list.length + ' issue(s) to fix: ' + list[0] };
+      }
+      return null;
+    }
+
+    // True when the open line form has input that is not saved (typed changes, or files attached to a new line).
+    function lineDirty() {
+      if (S.line === null || !S.lineForm) return false;
+      var form = app.querySelector('[data-line-form]');
+      if (!form) return false;
+      if (JSON.stringify(readFields(form, S.lineForm.fields)) !== S.lineForm.snap) return true;
+      return !S.line.LineNo && !!S.line.lineKey && filesFor('qpa', null, S.line.lineKey).length > 0;
+    }
+
+    // Shows why a forward move was refused: the list of issues on the page that needs fixing (focused), or, for a line
+    // being edited, a bar with Save line and Discard (the typed input stays).
+    function refuseForward(block) {
+      toast(block.message, true);
+      if (block.dirty) { showDirtyBar(); return; }
+      S.blocked = { page: block.page };
+      if (block.page !== S.page) { S.page = block.page; S.line = null; S.paste = null; }
+      render();
+      focusFirstIssue();
+    }
+
+    function showDirtyBar() {
+      var form = app.querySelector('[data-line-form]');
+      if (!form) return;
+      var bar = form.querySelector('[data-dirty-bar]');
+      if (!bar) {
+        form.insertAdjacentHTML('afterbegin', '<div class="problems" data-dirty-bar><b>Save or discard the line you are editing.</b> ' +
+          '<span class="row-actions" style="display:inline-flex;margin-left:8px"><button class="primary" data-dirty-save>Save line</button>' +
+          '<button class="ghost" data-dirty-discard>Discard</button></span></div><br>');
+        bar = form.querySelector('[data-dirty-bar]');
+        bar.querySelector('[data-dirty-save]').addEventListener('click', function (e) { e.preventDefault(); var b = form.querySelector('#save'); if (b) b.click(); });
+        bar.querySelector('[data-dirty-discard]').addEventListener('click', function (e) { e.preventDefault(); S.line = null; S.lineForm = null; render(); });
+      }
+      bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Highlights the fields of the open page that have issues and puts the cursor in the first one.
+    function focusFirstIssue() {
+      var card = app.querySelector('.card');
+      if (!card) return;
+      if (S.page <= 3 || S.page === 5) {
+        var fields = pageFields(pageAt(S.page));
+        showErrors(card, fields, S.d, ctxFor(S.d));
+      }
+      var first = card.querySelector('.f.err input, .f.err select, .f.err textarea') || card.querySelector('.problems');
+      if (first) {
+        first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (first.focus) first.focus({ preventScroll: true });
+      }
+    }
+
+    // The live list of what blocks Continue on the open page (shown after a refused move until it is empty).
+    function blockedBox() {
+      if (!S.blocked || S.blocked.page !== S.page) return '';
+      var list = pageIssues(S.page);
+      if (!list.length) { S.blocked = null; return ''; }
+      return problemBox(list, 'Fix these before you continue:');
     }
 
     // ---------------------------------------------------------------- file uploads
@@ -1356,6 +1432,11 @@
 
     // Ctrl+S (Cmd+S) saves the open page or line.
     document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        var cont = app.querySelector('#cont');
+        if (cont && !cont.disabled && S.view === 'edit') { e.preventDefault(); cont.click(); }
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         if (S.save) S.save(); else toast('Nothing to save on this screen.');
@@ -1436,7 +1517,9 @@
           var n = pageIssues(i).length;
           st = n ? '<span class="st bad">' + n + ' to fix</span>' : '<span class="st ok">✓</span>';
         }
-        return '<button data-step="' + i + '" class="' + (i === S.page ? 'on' : (i < S.page ? 'done' : '')) + '"' + (!S.id && i > 0 ? ' disabled' : '') + '>' +
+        var locked = S.id && i > S.page && editable() && forwardBlock(i);
+        return '<button data-step="' + i + '" class="' + (i === S.page ? 'on' : (i < S.page ? 'done' : '')) + (locked ? ' locked' : '') + '"' +
+          (!S.id && i > 0 ? ' disabled' : '') + (locked ? ' title="Finish the earlier pages first"' : '') + '>' +
           (i + 1) + ' · ' + esc(page.short) + st + '</button>';
       }).join('') + '</div>';
     }
@@ -1451,7 +1534,7 @@
 
     function footer(opts) {
       return '<div class="actions sticky"><div class="right"><button class="ghost" id="exit2">Exit</button>' +
-        (opts.back ? '<button class="secondary" id="back">Back</button>' : '') + '<span class="keys">Enter: next field · Ctrl+S: save</span></div><div class="right">' +
+        (opts.back ? '<button class="secondary" id="back">Back</button>' : '') + '<span class="keys">Enter: next field · Ctrl+S: save · Ctrl+Enter: continue</span></div><div class="right">' +
         (opts.extra || '') + (opts.save ? '<button class="secondary" id="save-page">Save</button>' : '') +
         (opts.next ? '<button class="primary" id="cont">' + esc(opts.next) + '</button>' : '') + '</div></div>';
     }
@@ -1461,10 +1544,15 @@
       var exit2 = app.querySelector('#exit2');
       if (exit2) exit2.addEventListener('click', function () { S.view = 'list'; render(); });
       app.querySelectorAll('[data-step]').forEach(function (b) {
-        b.addEventListener('click', function () { S.page = Number(b.getAttribute('data-step')); S.line = null; S.paste = null; render(); });
+        b.addEventListener('click', function () {
+          var target = Number(b.getAttribute('data-step'));
+          var block = forwardBlock(target);
+          if (block) { refuseForward(block); return; }
+          S.page = target; S.line = null; S.lineForm = null; S.paste = null; S.blocked = null; render();
+        });
       });
       var back = app.querySelector('#back');
-      if (back) back.addEventListener('click', function () { S.page--; S.line = null; S.paste = null; render(); });
+      if (back) back.addEventListener('click', function () { S.page--; S.line = null; S.lineForm = null; S.paste = null; S.blocked = null; render(); });
     }
 
     function renderEditor() {
@@ -1515,6 +1603,7 @@
           return '<div class="f half"><div class="lbl"><span class="req">*</span> ' + esc(a.label) + '</div><div class="locked"><span class="lock">Auto</span>' + esc(v) + '</div></div>';
         }).join('') + '</div>';
       }
+      inner = blockedBox() + inner;
       if (page.id === 'dtype' && S.lines.length) inner += '<div class="warn">If you change the dispute type, the portal asks you to enter the line items again. Check page 5 after saving.</div>';
       inner += footer({ back: S.page > 0, save: editable(), next: editable() ? 'Save & Continue' : 'Continue' });
       app.innerHTML = editorShell(inner, page.step, page.title);
@@ -1531,10 +1620,8 @@
         if (!editable()) { if (next) { S.page++; render(); } return; }
         var values = Object.assign({}, S.pending, readFields(card, fields));
         var rec = Object.assign({}, S.d, values);
-        var bad = showErrors(card, fields, rec, ctxFor(rec));
-        if (bad && next) { toast('Fix the highlighted fields to continue, or Save to keep your work.', true); return; }
+        showErrors(card, fields, rec, ctxFor(rec));
         if (pendingSuggestion(card)) return;
-        var missingFile = fields.some(function (f) { return f.type === 'file' && fieldRequired(f, rec, ctxFor(rec)) && !filesFor(f.category).length; });
         busy(true);
         call('saveDispute', { id: S.id, values: values, page: page.id, draftToken: S.id ? '' : S.draftToken }).then(function (r) {
           S.id = r.id;
@@ -1543,8 +1630,10 @@
           learnLocal(fields, values);
           apply(r.bundle);
           busy(false);
-          if (next && missingFile) { toast('Saved. Upload the required document before continuing.', true); render(); return; }
-          if (next) S.page++;
+          // Saved either way (a draft can have gaps); Continue moves on only when the page has no issue.
+          var block = next ? forwardBlock(S.page + 1) : null;
+          if (block) { refuseForward(block); return; }
+          if (next) { S.page++; S.blocked = null; }
           render();
           toast('Saved');
         }).catch(fail);
@@ -1612,7 +1701,9 @@
       var inner = '<div class="kind-note"><b>' + esc(S.d.dispute_kind || 'Dispute type not set') + '.</b> ' + esc(kindNote()) + '</div>';
       inner += '<h3>Summary of Qualified Items and/or Services</h3>' + linesGrid();
       var rulesNow = lineRules(S.d, S.lines).concat(repeatsWithin(S.lines));
-      if (S.lines.length) inner += problemBox(rulesNow, 'Line item rules to fix:');
+      var blocked = blockedBox();
+      if (blocked) inner += blocked;
+      else if (S.lines.length) inner += problemBox(rulesNow, 'Line item rules to fix:');
       inner += warnBox(S.warnings);
       if (S.line === null && S.paste === null) {
         inner += '<p class="row-actions" style="margin-top:14px">' + (canAddLine() ? '<button class="secondary" id="add">+ Add line item</button>' +
@@ -1645,7 +1736,11 @@
       });
       if (card.querySelector('#add')) card.querySelector('#add').addEventListener('click', function () { S.line = newLine(); render(); scrollToForm(); });
       if (card.querySelector('#paste')) card.querySelector('#paste').addEventListener('click', function () { S.paste = { text: '', rows: null }; render(); scrollToForm(); });
-      app.querySelector('#cont').addEventListener('click', function () { S.page = 5; S.line = null; S.paste = null; render(); });
+      app.querySelector('#cont').addEventListener('click', function () {
+        var block = forwardBlock(5);
+        if (block) { refuseForward(block); return; }
+        S.page = 5; S.line = null; S.lineForm = null; S.paste = null; S.blocked = null; render();
+      });
       if (S.paste !== null) wirePaste(card);
       if (S.line !== null) wireLineForm(card);
     }
@@ -1682,6 +1777,8 @@
       var ctx = ctxFor(S.d);
       wireForm(form, fields, rec, ctx);
       wireAmounts(form);
+      // What the form held when it opened: Continue is refused while the line differs from it (see lineDirty).
+      S.lineForm = { fields: fields, snap: JSON.stringify(readFields(form, fields)) };
 
       // "Uses line N's documentation" when another line has the same claim number.
       var claimInput = form.querySelector('.f[data-key="claim_number"] input');
@@ -1698,7 +1795,7 @@
       // Files picked on a new line are kept under its line key and linked when the line is saved.
       wireUploads(form, function () { return { lineNo: S.line && S.line.LineNo, lineKey: S.line && !S.line.LineNo ? S.line.lineKey : '' }; });
 
-      form.querySelector('#cancel').addEventListener('click', function () { S.line = null; render(); });
+      form.querySelector('#cancel').addEventListener('click', function () { S.line = null; S.lineForm = null; render(); });
       if (form.querySelector('#del')) form.querySelector('#del').addEventListener('click', function () {
         if (!confirm('Delete line ' + lineNo + '?')) return;
         busy(true);
@@ -2252,7 +2349,9 @@
       var h = '<div class="admin-layout"><div class="admin-lists">' + r.lists.map(function (l) {
         return '<button data-list="' + esc(l.list) + '" class="' + (l.list === S.admin.list ? 'on' : '') + '">' + esc(l.list) + (l.strict ? ' · strict' : '') +
           ' <span class="muted">(' + esc(l.active) + (l.hidden ? ' + ' + esc(l.hidden) + ' hidden' : '') + ')</span></button>';
-      }).join('') + '</div><div>';
+      }).join('') + '<div class="card" style="padding:10px;margin-top:8px"><b style="font-size:13px">New list</b>' + inp('data-newlist', '') +
+        '<div class="muted" style="font-size:12px">Name (letters and digits) and its first value:</div>' + inp('data-newlist-value', '') +
+        '<button class="secondary" data-act-newlist style="margin-top:6px">Create list</button></div></div><div>';
       if (!r.rows) {
         h += '<div class="card">Pick a list. Learning mode is <b>' + esc(r.learningMode) + '</b>' +
           (r.learningMode === 'Off' ? ': new values typed by users wait here as Hidden until you activate them.' : ': new values are active at once (training phase).') +
@@ -2260,16 +2359,22 @@
       } else {
         var active = r.rows.filter(function (x) { return x.status !== 'Hidden'; }).map(function (x) { return x.value; });
         h += '<datalist id="dl_admin">' + active.map(function (v) { return '<option value="' + esc(v) + '"></option>'; }).join('') + '</datalist>' +
-          '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Value</th><th>Key</th><th>Label</th><th>Sort</th><th>Uses</th><th>Source</th><th>Status</th><th>Actions</th></tr>' +
+          '<div class="row-actions" style="margin-bottom:10px"><b>Add a value' + (r.strict ? ' (strict list: the portal\'s exact wording)' : '') + ':</b>' +
+          inp('data-add-value', '', 220) + inp('data-add-label', '', 140) + inp('data-add-key', '', 110) + inp('data-add-sort', '', 60) +
+          '<button class="secondary" data-act-add>Add</button><span class="muted" style="font-size:12px">value · label · key · sort</span>' +
+          (r.custom && !active.length ? '<button class="danger" data-act-dellist>Delete this list</button>' : '') + '</div>' +
+          '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Value</th><th>Key</th><th>Label</th><th>Sort</th><th>Uses</th><th>Saved on</th><th>Source</th><th>Status</th><th>Actions</th></tr>' +
           r.rows.map(function (x, i) {
             var badName = r.list === 'Payer' && badChars('name', x.value).length;
             return '<tr class="' + (x.status === 'Hidden' ? 'hidden-row' : '') + '" data-i="' + i + '"><td>' + inp('data-value', x.value) +
               (badName ? '<div class="muted">Portal rejects: ' + esc(badChars('name', x.value).join(' ')) + ' (Fix gives "' + esc(fixChars('name', x.value)) + '")</div>' : '') +
               (x.similar ? '<div class="muted">Looks like: ' + esc(x.similar) + '</div>' : '') +
               (x.mergedInto ? '<div class="muted">Merged into: ' + esc(x.mergedInto) + '</div>' : '') + '</td>' +
-              '<td>' + esc(x.key) + '</td><td>' + inp('data-label', x.label) + '</td><td>' + inp('data-sort', x.sort, 60) + '</td><td>' + esc(x.count) + '</td><td>' + esc(x.source) +
+              '<td>' + inp('data-key', x.key, 110) + (x.ruleKey ? '<div class="muted">used by the rules</div>' : '') + '</td><td>' + inp('data-label', x.label) + '</td><td>' +
+              inp('data-sort', x.sort, 60) + '</td><td>' + esc(x.count) + '</td><td>' + esc(x.used || 0) + '</td><td>' + esc(x.source) +
               '</td><td>' + esc(x.status) + '</td>' +
               '<td><div class="row-actions"><button class="secondary" data-act="save">Save</button>' +
+              '<button class="danger" data-act="remove">Remove</button>' +
               '<button class="ghost" data-act="status">' + (x.status === 'Hidden' ? 'Activate' : 'Hide') + '</button>' +
               (x.key && r.strict ? '' : '<input type="text" data-merge list="dl_admin" placeholder="Merge into…" value="' + esc(x.similar) + '" style="max-width:150px">' +
               '<button class="ghost" data-act="merge">Merge</button>') + '</div></td></tr>';
@@ -2289,7 +2394,15 @@
           var x = r.rows[Number(tr.getAttribute('data-i'))];
           var act = b.getAttribute('data-act');
           var change = {};
+          if (act === 'remove') {
+            if (!confirm('Remove "' + x.value + '" from ' + S.admin.list + '?' + (x.used ? ' It was used on ' + x.used + ' saved dispute(s) or line item(s); they keep the text.' : ''))) return;
+            busy(true);
+            call('adminRemoveOption', S.admin.list, x.value).then(function (d) { busy(false); toast(d.warning || 'Removed', d.warning ? 'warn' : false); showAdmin(d); }).catch(fail);
+            return;
+          }
           if (act === 'save') {
+            var nk = tr.querySelector('[data-key]').value.trim();
+            if (nk !== (x.key || '')) change.key = nk;
             change.label = tr.querySelector('[data-label]').value.trim();
             change.sort = tr.querySelector('[data-sort]').value.trim();
             var nv = tr.querySelector('[data-value]').value.trim();
@@ -2307,6 +2420,25 @@
           adminSave('adminUpdateOption', [S.admin.list, x.value, change], showAdmin);
         });
       });
+      var addBtn = box.querySelector('[data-act-add]');
+      if (addBtn) addBtn.addEventListener('click', function () {
+        var q = function (a) { return box.querySelector('[' + a + ']').value.trim(); };
+        if (!q('data-add-value')) { toast('Type the value to add.', true); return; }
+        adminSave('adminAddOption', [S.admin.list, { value: q('data-add-value'), label: q('data-add-label'), key: q('data-add-key'), sort: q('data-add-sort') }], showAdmin);
+      });
+      var delList = box.querySelector('[data-act-dellist]');
+      if (delList) delList.addEventListener('click', function () {
+        if (!confirm('Delete the list ' + S.admin.list + ' and its hidden values?')) return;
+        var name = S.admin.list;
+        S.admin.list = '';
+        adminSave('adminDeleteList', [name], showAdmin);
+      });
+      box.querySelector('[data-act-newlist]').addEventListener('click', function () {
+        var name = box.querySelector('[data-newlist]').value.trim(), first = box.querySelector('[data-newlist-value]').value.trim();
+        if (!name || !first) { toast('Enter the list name and its first value.', true); return; }
+        S.admin.list = name;
+        adminSave('adminAddOption', [name, { value: first }], showAdmin);
+      });
     }
 
     // ---- Users
@@ -2319,10 +2451,33 @@
           '</td><td>' + inp('data-notes', u.notes) + '</td><td><button class="secondary" data-save>' + (u.email ? 'Save' : 'Add') + '</button></td></tr>';
       };
       var rows = r.users.concat([{ email: '', name: '', role: 'LB Member', team: '', active: true, notes: '' }]);
-      box.innerHTML = '<div class="card" style="margin-bottom:12px">Roles: <b>Admin</b> (everything, plus these views), <b>LB Member</b> (prepares Draft and Returned disputes, sends them to the US desk), ' +
+      var reqs = r.requests || [];
+      var pending = reqs.filter(function (q) { return q.status === 'Pending'; });
+      var reqHtml = '<h2>Requests' + (pending.length ? ' <span class="badge b-returned">' + pending.length + ' pending</span>' : '') + '</h2>' +
+        (reqs.length ? '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Email</th><th>Name</th><th>Team</th><th>Notes</th><th>Requested</th><th>Status</th><th>Decision</th></tr>' +
+          reqs.map(function (q, i) {
+            var decide = q.status === 'Pending'
+              ? '<div class="row-actions">' + sel('data-req-role', r.roles, 'LB Member') + inp('data-req-team', q.team, 110) +
+                '<button class="success" data-req-approve="' + i + '">Approve</button>' + inp('data-req-note', '', 140) +
+                '<button class="danger" data-req-reject="' + i + '">Reject</button></div>'
+              : esc(q.status + (q.role ? ' as ' + q.role : '') + ' by ' + q.decidedBy + ' on ' + String(q.decidedAt).slice(0, 10) + (q.note ? ': ' + q.note : ''));
+            return '<tr data-req="' + i + '"' + (q.status === 'Pending' ? '' : ' class="hidden-row"') + '><td><b>' + esc(q.email) + '</b></td><td>' + esc(q.name) + '</td><td>' +
+              esc(q.team) + '</td><td>' + esc(q.notes) + '</td><td>' + esc(q.requestedAt) + '</td><td>' + esc(q.status) + '</td><td>' + decide + '</td></tr>';
+          }).join('') + '</table></div>' : '<p class="muted">No access requests.</p>') + '<h2 style="margin-top:22px">Members</h2>';
+      box.innerHTML = reqHtml + '<div class="card" style="margin-bottom:12px">Roles: <b>Admin</b> (everything, plus these views), <b>LB Member</b> (prepares Draft and Returned disputes, sends them to the US desk), ' +
         '<b>US Member</b> (copy desk, files, returns). Members are never deleted: set Active to No. The last active Admin cannot be removed or given another role.</div>' +
         '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Email</th><th>Name</th><th>Role</th><th>Team</th><th>Active</th><th>Notes</th><th></th></tr>' +
         rows.map(row).join('') + '</table></div>';
+      box.querySelectorAll('[data-req-approve], [data-req-reject]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tr = b.closest('tr'), q = reqs[Number(tr.getAttribute('data-req'))];
+          var approve = b.hasAttribute('data-req-approve');
+          var note = tr.querySelector('[data-req-note]').value.trim();
+          if (!approve && !confirm('Reject the request of ' + q.email + '?')) return;
+          adminSave('adminDecideAccess', [q.email, approve ? { approve: true, role: tr.querySelector('[data-req-role]').value, team: tr.querySelector('[data-req-team]').value.trim(), note: note }
+            : { approve: false, note: note }], showUsers);
+        });
+      });
       box.querySelectorAll('[data-save]').forEach(function (b) {
         b.addEventListener('click', function () {
           var tr = b.closest('tr'), u = rows[Number(tr.getAttribute('data-i'))];

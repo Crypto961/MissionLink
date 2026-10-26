@@ -2349,7 +2349,9 @@
       var h = '<div class="admin-layout"><div class="admin-lists">' + r.lists.map(function (l) {
         return '<button data-list="' + esc(l.list) + '" class="' + (l.list === S.admin.list ? 'on' : '') + '">' + esc(l.list) + (l.strict ? ' · strict' : '') +
           ' <span class="muted">(' + esc(l.active) + (l.hidden ? ' + ' + esc(l.hidden) + ' hidden' : '') + ')</span></button>';
-      }).join('') + '</div><div>';
+      }).join('') + '<div class="card" style="padding:10px;margin-top:8px"><b style="font-size:13px">New list</b>' + inp('data-newlist', '') +
+        '<div class="muted" style="font-size:12px">Name (letters and digits) and its first value:</div>' + inp('data-newlist-value', '') +
+        '<button class="secondary" data-act-newlist style="margin-top:6px">Create list</button></div></div><div>';
       if (!r.rows) {
         h += '<div class="card">Pick a list. Learning mode is <b>' + esc(r.learningMode) + '</b>' +
           (r.learningMode === 'Off' ? ': new values typed by users wait here as Hidden until you activate them.' : ': new values are active at once (training phase).') +
@@ -2357,16 +2359,22 @@
       } else {
         var active = r.rows.filter(function (x) { return x.status !== 'Hidden'; }).map(function (x) { return x.value; });
         h += '<datalist id="dl_admin">' + active.map(function (v) { return '<option value="' + esc(v) + '"></option>'; }).join('') + '</datalist>' +
-          '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Value</th><th>Key</th><th>Label</th><th>Sort</th><th>Uses</th><th>Source</th><th>Status</th><th>Actions</th></tr>' +
+          '<div class="row-actions" style="margin-bottom:10px"><b>Add a value' + (r.strict ? ' (strict list: the portal\'s exact wording)' : '') + ':</b>' +
+          inp('data-add-value', '', 220) + inp('data-add-label', '', 140) + inp('data-add-key', '', 110) + inp('data-add-sort', '', 60) +
+          '<button class="secondary" data-act-add>Add</button><span class="muted" style="font-size:12px">value · label · key · sort</span>' +
+          (r.custom && !active.length ? '<button class="danger" data-act-dellist>Delete this list</button>' : '') + '</div>' +
+          '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Value</th><th>Key</th><th>Label</th><th>Sort</th><th>Uses</th><th>Saved on</th><th>Source</th><th>Status</th><th>Actions</th></tr>' +
           r.rows.map(function (x, i) {
             var badName = r.list === 'Payer' && badChars('name', x.value).length;
             return '<tr class="' + (x.status === 'Hidden' ? 'hidden-row' : '') + '" data-i="' + i + '"><td>' + inp('data-value', x.value) +
               (badName ? '<div class="muted">Portal rejects: ' + esc(badChars('name', x.value).join(' ')) + ' (Fix gives "' + esc(fixChars('name', x.value)) + '")</div>' : '') +
               (x.similar ? '<div class="muted">Looks like: ' + esc(x.similar) + '</div>' : '') +
               (x.mergedInto ? '<div class="muted">Merged into: ' + esc(x.mergedInto) + '</div>' : '') + '</td>' +
-              '<td>' + esc(x.key) + '</td><td>' + inp('data-label', x.label) + '</td><td>' + inp('data-sort', x.sort, 60) + '</td><td>' + esc(x.count) + '</td><td>' + esc(x.source) +
+              '<td>' + inp('data-key', x.key, 110) + (x.ruleKey ? '<div class="muted">used by the rules</div>' : '') + '</td><td>' + inp('data-label', x.label) + '</td><td>' +
+              inp('data-sort', x.sort, 60) + '</td><td>' + esc(x.count) + '</td><td>' + esc(x.used || 0) + '</td><td>' + esc(x.source) +
               '</td><td>' + esc(x.status) + '</td>' +
               '<td><div class="row-actions"><button class="secondary" data-act="save">Save</button>' +
+              '<button class="danger" data-act="remove">Remove</button>' +
               '<button class="ghost" data-act="status">' + (x.status === 'Hidden' ? 'Activate' : 'Hide') + '</button>' +
               (x.key && r.strict ? '' : '<input type="text" data-merge list="dl_admin" placeholder="Merge into…" value="' + esc(x.similar) + '" style="max-width:150px">' +
               '<button class="ghost" data-act="merge">Merge</button>') + '</div></td></tr>';
@@ -2386,7 +2394,15 @@
           var x = r.rows[Number(tr.getAttribute('data-i'))];
           var act = b.getAttribute('data-act');
           var change = {};
+          if (act === 'remove') {
+            if (!confirm('Remove "' + x.value + '" from ' + S.admin.list + '?' + (x.used ? ' It was used on ' + x.used + ' saved dispute(s) or line item(s); they keep the text.' : ''))) return;
+            busy(true);
+            call('adminRemoveOption', S.admin.list, x.value).then(function (d) { busy(false); toast(d.warning || 'Removed', d.warning ? 'warn' : false); showAdmin(d); }).catch(fail);
+            return;
+          }
           if (act === 'save') {
+            var nk = tr.querySelector('[data-key]').value.trim();
+            if (nk !== (x.key || '')) change.key = nk;
             change.label = tr.querySelector('[data-label]').value.trim();
             change.sort = tr.querySelector('[data-sort]').value.trim();
             var nv = tr.querySelector('[data-value]').value.trim();
@@ -2404,6 +2420,25 @@
           adminSave('adminUpdateOption', [S.admin.list, x.value, change], showAdmin);
         });
       });
+      var addBtn = box.querySelector('[data-act-add]');
+      if (addBtn) addBtn.addEventListener('click', function () {
+        var q = function (a) { return box.querySelector('[' + a + ']').value.trim(); };
+        if (!q('data-add-value')) { toast('Type the value to add.', true); return; }
+        adminSave('adminAddOption', [S.admin.list, { value: q('data-add-value'), label: q('data-add-label'), key: q('data-add-key'), sort: q('data-add-sort') }], showAdmin);
+      });
+      var delList = box.querySelector('[data-act-dellist]');
+      if (delList) delList.addEventListener('click', function () {
+        if (!confirm('Delete the list ' + S.admin.list + ' and its hidden values?')) return;
+        var name = S.admin.list;
+        S.admin.list = '';
+        adminSave('adminDeleteList', [name], showAdmin);
+      });
+      box.querySelector('[data-act-newlist]').addEventListener('click', function () {
+        var name = box.querySelector('[data-newlist]').value.trim(), first = box.querySelector('[data-newlist-value]').value.trim();
+        if (!name || !first) { toast('Enter the list name and its first value.', true); return; }
+        S.admin.list = name;
+        adminSave('adminAddOption', [name, { value: first }], showAdmin);
+      });
     }
 
     // ---- Users
@@ -2416,10 +2451,33 @@
           '</td><td>' + inp('data-notes', u.notes) + '</td><td><button class="secondary" data-save>' + (u.email ? 'Save' : 'Add') + '</button></td></tr>';
       };
       var rows = r.users.concat([{ email: '', name: '', role: 'LB Member', team: '', active: true, notes: '' }]);
-      box.innerHTML = '<div class="card" style="margin-bottom:12px">Roles: <b>Admin</b> (everything, plus these views), <b>LB Member</b> (prepares Draft and Returned disputes, sends them to the US desk), ' +
+      var reqs = r.requests || [];
+      var pending = reqs.filter(function (q) { return q.status === 'Pending'; });
+      var reqHtml = '<h2>Requests' + (pending.length ? ' <span class="badge b-returned">' + pending.length + ' pending</span>' : '') + '</h2>' +
+        (reqs.length ? '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Email</th><th>Name</th><th>Team</th><th>Notes</th><th>Requested</th><th>Status</th><th>Decision</th></tr>' +
+          reqs.map(function (q, i) {
+            var decide = q.status === 'Pending'
+              ? '<div class="row-actions">' + sel('data-req-role', r.roles, 'LB Member') + inp('data-req-team', q.team, 110) +
+                '<button class="success" data-req-approve="' + i + '">Approve</button>' + inp('data-req-note', '', 140) +
+                '<button class="danger" data-req-reject="' + i + '">Reject</button></div>'
+              : esc(q.status + (q.role ? ' as ' + q.role : '') + ' by ' + q.decidedBy + ' on ' + String(q.decidedAt).slice(0, 10) + (q.note ? ': ' + q.note : ''));
+            return '<tr data-req="' + i + '"' + (q.status === 'Pending' ? '' : ' class="hidden-row"') + '><td><b>' + esc(q.email) + '</b></td><td>' + esc(q.name) + '</td><td>' +
+              esc(q.team) + '</td><td>' + esc(q.notes) + '</td><td>' + esc(q.requestedAt) + '</td><td>' + esc(q.status) + '</td><td>' + decide + '</td></tr>';
+          }).join('') + '</table></div>' : '<p class="muted">No access requests.</p>') + '<h2 style="margin-top:22px">Members</h2>';
+      box.innerHTML = reqHtml + '<div class="card" style="margin-bottom:12px">Roles: <b>Admin</b> (everything, plus these views), <b>LB Member</b> (prepares Draft and Returned disputes, sends them to the US desk), ' +
         '<b>US Member</b> (copy desk, files, returns). Members are never deleted: set Active to No. The last active Admin cannot be removed or given another role.</div>' +
         '<div style="overflow-x:auto"><table class="grid edit"><tr><th>Email</th><th>Name</th><th>Role</th><th>Team</th><th>Active</th><th>Notes</th><th></th></tr>' +
         rows.map(row).join('') + '</table></div>';
+      box.querySelectorAll('[data-req-approve], [data-req-reject]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tr = b.closest('tr'), q = reqs[Number(tr.getAttribute('data-req'))];
+          var approve = b.hasAttribute('data-req-approve');
+          var note = tr.querySelector('[data-req-note]').value.trim();
+          if (!approve && !confirm('Reject the request of ' + q.email + '?')) return;
+          adminSave('adminDecideAccess', [q.email, approve ? { approve: true, role: tr.querySelector('[data-req-role]').value, team: tr.querySelector('[data-req-team]').value.trim(), note: note }
+            : { approve: false, note: note }], showUsers);
+        });
+      });
       box.querySelectorAll('[data-save]').forEach(function (b) {
         b.addEventListener('click', function () {
           var tr = b.closest('tr'), u = rows[Number(tr.getAttribute('data-i'))];

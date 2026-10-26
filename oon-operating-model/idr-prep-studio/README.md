@@ -1,4 +1,4 @@
-# IDR Initiation Prep Studio (v4)
+# IDR Initiation Prep Studio (v4.1)
 
 An internal Google Apps Script web app. Lebanon prepares each Notice of IDR Initiation here, on 7 pages that follow the federal **IDR Gateway** web form page by page. The US desk then copies every field into the portal from top to bottom, with one click per field.
 
@@ -19,6 +19,12 @@ The app learns as it is used. Every dropdown list lives in the **Options** tab a
 - **Admin screens:** an admin edits all of this in the app: Lists, Users, Billing entities, and Settings & fields.
 - **Upload before saving:** files can be attached before a dispute or line is saved.
 - **RCM Specialist:** Owner is renamed RCM Specialist.
+
+**New in v4.1:**
+- **Step gating:** Continue only moves on when the page has nothing left to fix (see [Moving around](#page-order-same-as-the-portal)).
+- **Access requests:** people without access can request it, and an Admin approves or rejects the request in **Admin → Users** (see [Access requests](#access-requests)).
+- **Lists:** an admin can add, remove and create lists in **Admin → Lists**.
+- **Billing entities:** all 24 have a full confirmed profile from the business.
 
 The values written in `Code.gs` are only the fallback seed, used when a tab, list or row is missing.
 
@@ -52,6 +58,13 @@ The values written in `Code.gs` are only the fallback seed, used when a tab, lis
 Then the **US desk** copies it into the portal and marks it filed.
 
 **Moving around.** The stepper at the top shows each page with a ✓ or the number of things to fix. The footer stays at the bottom of the screen with Back, Save and Save & Continue. **Enter** moves to the next field and **Ctrl+S** saves the page (or the open line). Save keeps your work even when something is still missing; Save & Continue checks the page first.
+
+**Step gating.** You cannot move forward past a page that still has something to fix:
+- **Save & Continue**, **Ctrl+Enter** and a later page in the stepper all stop on the first page with a blocking issue or a missing required field. The list of problems shows and the first one gets the focus.
+- The stepper moves forward only up to that page. **Back** and earlier pages are always allowed, and **Save** keeps a draft with gaps.
+- **Line items (page 5):** Continue is blocked while the line form has unsaved changes ("Save or discard the line you are editing", with **Save line** and **Discard**). It is also blocked while a saved line has a problem, or while the line count does not fit the dispute type.
+- Notices (for example "the filing window opens on …") never block.
+- The server still checks everything when you send a dispute to the US desk.
 
 **Locked chips.** Values that the app sets show as a grey chip, not an input:
 - Location of Service: `TX` (fixed).
@@ -160,7 +173,7 @@ Copied formats:
 
 ## Roles
 
-Everyone who uses the app must be an **active row on the Users tab**. Anyone else sees "Access not granted". Every server function checks the role, not only the screens.
+Everyone who uses the app must be an **active row on the Users tab**. Anyone else sees the access page (see [Access requests](#access-requests)). Every server function checks the role, not only the screens.
 
 | Role | Can |
 | --- | --- |
@@ -176,6 +189,26 @@ Everyone who uses the app must be an **active row on the Users tab**. Anyone els
 - There is always at least one active Admin: a change that would leave none (including adding a non-Admin as the first member) is refused.
 - First setup: while no member is active, only the script owner (the account the script runs as) can run `setup`, `installTriggers` and the demo functions; other visitors are refused.
 
+## Access requests
+
+Someone who is not an active member sees: "You don't have access to the IDR Prep Studio. If you need access, request it from an Admin." They get a form:
+- **Email:** their Google account, filled in and read-only.
+- **Full name** and **Team name** (required; the portal's name characters).
+- **Notes** (optional, up to 500 characters).
+
+After sending, the page shows "Request sent. An Admin will review it." On a later visit it shows that the request is pending, and they can update it.
+- A visitor who is not signed in to a Google account (empty email) sees "Sign in with your organization Google account" instead of the form.
+- `requestAccess` is the only server function a non-member can call. It refuses active members and an empty email.
+- Each email has at most one Pending request: sending again updates it.
+- Requests go to the **AccessRequests** tab: Email, Name, Team, Notes, RequestedAt, Status (Pending, Approved, Rejected), Role, DecidedBy, DecidedAt, DecisionNote.
+- When `NotifyAdminsOnRequest` is Yes, every active Admin gets an email about a new request. A failed email is logged and never blocks the request.
+
+**Admin → Users → Requests** lists the requests, Pending first.
+- **Approve:** pick the role; the team is filled in from the request. It adds the Users row, or reactivates an existing one.
+- **Reject:** with an optional note. A rejected person can request again; the page shows the note.
+- Both are written to the **Log**. When `NotifyRequester` is Yes, the person gets an email with the decision.
+- The last-admin rule still applies.
+
 ## The tabs (v4)
 
 | Tab | Columns |
@@ -183,6 +216,7 @@ Everyone who uses the app must be an **active row on the Users tab**. Anyone els
 | **Options** | List, Key, Value, Label, Data, Count, LastUsed, Source, Status, Sort, Strict, AddedBy, AddedAt. **Key:** a stable id the rules use (blank for ordinary values). **Sort:** display order (lists with Sort values keep it; others are ranked by use). **Strict = Yes:** the portal's exact wording; the list never learns new values. |
 | **Fields** | Page, Section, Order, Key, Label, Help, Type, List, Required, Default, DefaultMode, Locked, Visible, Pattern, PatternMessage, CopyOrder, Notes |
 | **Users** | Email, Name, Role (Admin, LB Member, US Member), Team, Active, AddedBy, AddedAt, Notes |
+| **AccessRequests** (v4.1) | Email, Name, Team, Notes, RequestedAt, Status, Role, DecidedBy, DecidedAt, DecisionNote |
 | **BillingEntities** | Name, ActingAs, TIN, NPI, GroupName, Addr1, Addr2, City, State, ZIP, Email, Phone, Fax, Confirmed, Status, Count, LastUsed, AddedBy, AddedAt, Notes, Aliases (semicolon list) |
 | **Settings** | Key, Value, Note (see [Settings](#settings)) |
 | **Disputes, LineItems, Files, Log** | As in v3. Disputes: `Owner` is now `RcmSpecialist`. Files: new `LineKey` and `SameClaim` columns, for files attached to a line before it is saved. |
@@ -211,12 +245,17 @@ The rules refer to their Keys. For example, HealthPlanType `fehb` asks for the e
 ## Admin screens
 
 - **Lists:** every Options list. You can:
-  - Reword a value (keeps its Key), and change its label or sort order.
+  - **Add** a value to any list, strict lists included (Value, Label, Key, Sort).
+  - Reword a value, and change its Key, label or sort order.
   - Hide or activate a value.
+  - **Remove** a value: its Options row is deleted, after a confirm. A value used on saved disputes or line items can still be removed: the confirm and a warning show how many use it, and they keep the text.
   - Merge a learned value into another one.
+  - **New list:** a name (letters and digits) and its first value. A custom list with no active value left can be deleted (**Delete this list**).
+
+  Some Keys are used by the app's rules: YesNo `yes`, BundledPayment `yes`, HealthPlanType `individual` and `fehb`, PlanRole `group`, `individual` and `fehb`, DisputeType `single` and `batched`, ExtensionReason `approval` and `cooling`, ItemType `emergency` and `other`, LineType `bundled` and `component`, IdreStatus `pending`. A value carrying one of them cannot be removed, hidden or given another Key unless another active value of the list carries the same Key ("used by the rules" shows under it). A strict list always keeps at least one active value. Built-in lists cannot be deleted. Every change is logged and clears the caches.
 
   Portal options with a Key are reworded, never merged. Names the portal would reject are flagged, with what Fix would give.
-- **Users:** add a member (email checked), change the name, role, team, active flag or notes.
+- **Users:** add a member (email checked), change the name, role, team, active flag or notes. The **Requests** section handles access requests (see [Access requests](#access-requests)).
 - **Billing entities:** add and edit every column, with checks: TIN 9 digits, NPI 10, ZIP, phone, email, the portal's name and address characters, I am a(n) from the ActingAs list.
   - Hide or activate an entity.
   - Renaming keeps the old name in Aliases.
@@ -249,8 +288,8 @@ The rules refer to their Keys. For example, HealthPlanType `fehb` asks for the e
 3. Replace the default `Code.gs` with this `Code.gs`.
 4. Add two HTML files with **+ → HTML**, named exactly **Index** and **Pdf**, and paste in `Index.html` and `Pdf.html`.
 5. Click **Services +**, choose **Google Sheets API** and click **Add**. Keep the identifier `Sheets`. This makes the app much faster; without it the app still works, more slowly.
-6. Select **setup** in the function menu and click **Run**. Approve the permissions prompt. This creates:
-   - The tabs **Disputes**, **LineItems**, **Files**, **Options**, **Settings**, **Fields**, **Users**, **BillingEntities** and **Log**.
+6. Select **setup** in the function menu and click **Run**. Approve the permissions prompt (it includes sending email, for access request notices). This creates:
+   - The tabs **Disputes**, **LineItems**, **Files**, **Options**, **Settings**, **Fields**, **Users**, **BillingEntities**, **AccessRequests** and **Log**.
    - The seed lists in **Options** and **BillingEntities** (see [Seed lists](#seed-lists)).
    - One **Fields** row per field, and the **Settings** rows.
    - A Drive folder named **IDR Prep Studio - Disputes**.
@@ -261,11 +300,17 @@ The rules refer to their Keys. For example, HealthPlanType `fehb` asks for the e
 10. **Deploy → New deployment → Web app**. Set **Execute as: Me** and **Who has access: Anyone within your organization**.
 11. Share the web app URL with the team.
 
+## Upgrade from v4
+
+1. Replace `Code.gs` and `Index.html` (and `DemoData.gs` if you use it).
+2. Run **setup** once, as an admin, and approve the new email permission. It adds the **AccessRequests** tab and the Settings rows `NotifyAdminsOnRequest` and `NotifyRequester`. It also fills the full business profile of every seed billing entity: blank columns are filled, an unconfirmed I am a(n) is replaced, and values you entered are kept.
+3. **Deploy → Manage deployments → Edit → New version**.
+
 ## Upgrade from v3
 
 1. Replace `Code.gs`, `Index.html`, `Pdf.html` (and `DemoData.gs` if you use it).
 2. Run **setup** once, as an admin. It is safe to run again; a second run changes nothing. It:
-   - **Adds the new tabs:** Fields, Users, BillingEntities.
+   - **Adds the new tabs:** Fields, Users, BillingEntities, AccessRequests.
    - **Adds the new columns:** Options `Key`, `Sort`, `Strict`; Files `LineKey`, `SameClaim`; the new Settings rows. New columns go at the end of an existing tab; the app finds columns by name.
    - **Renames** the Disputes column `Owner` to `RcmSpecialist`, and the Options list Owner to RcmSpecialist. Before that, the app reads `Owner` as RCM Specialist.
    - **Creates the Users tab:**
@@ -311,7 +356,7 @@ Run the v4 `setup`: it does the v2 to v3 upgrade below and the v3 to v4 upgrade 
 
 | List | Seed |
 | --- | --- |
-| BillingEntities tab | Our 24 billing entities, exactly as the business spelled them. The first guess for "I am a(n)" comes from the legal form: PLLC = health care provider, LLC = health care facility. It shows a "guess from the name: check it" chip until a saved dispute confirms it. Silver Alliance, LLC (facility) and Capital Health, PLLC (provider, group "Totalcare ER, Cedar Hill") keep their full v2 profiles from the notices (Confirmed Yes; v2 spellings as Aliases). The other profiles are learned on their first save, or entered in Admin → Billing entities. |
+| BillingEntities tab | Our 24 billing entities with the full profile given by the business (Confirmed Yes): legal name, I am a(n) (provider or facility), TIN, NPI, group name "Totalcare ER, <site>", negotiations email, and the central mailing address and phone (6049 S. Hulen St., Fort Worth, TX 76132). Silver Alliance, LLC and Capital Health, PLLC keep their v2 spellings as Aliases. `setup` fills blank profile columns of existing rows, and replaces an unconfirmed I am a(n) with the business's value. An entity added later from a saved dispute shows a "not confirmed: check it" chip until it is confirmed. |
 | Payer | The 124 non-initiating parties (plans, issuers, TPAs) given by the business. UMR, UHC, BCBS and Cigna have address-book profiles from the notices. Aliases: United Healthcare → UHC, BLUECROSS BLUESHIELD → BCBS, Health Now → HealthNow. BENEFITS HEALTHSMART and Healthsmart stay separate. |
 | ServiceCode | 373 codes. Descriptions are seeded only for the 29 codes seen on the notices; the others are learned on first save. |
 | HealthPlanType | The portal's 7 options (strict, with Keys) |
@@ -319,14 +364,9 @@ Run the v4 `setup`: it does the v2 to v3 upgrade below and the v3 to v4 upgrade 
 | IdrEntity, PosCode, Modifier, ReturnReason, Holiday, State | As in v2 (ReturnReason adds "Duplicate line item") |
 | Team, RcmSpecialist | Learned on save (Add new) |
 
-**Names to confirm with the business.** These are kept exactly as given:
-- "Deerfield plains"
-- "Silver choice"
-- "Cedar Physcians"
-- "WRFER University" (the others are "WFRER Denton" and "WFRER Cooper")
-- "RSER Benbrook"
+**Legal names.** The entity names are the business's legal names, kept exactly as given (for example "Deerfield plains", "Silver choice", "Cedar Physcians", "WRFER University", "RSER Benbrook").
 
-Also check that "BENEFITS HEALTHSMART" and "Healthsmart" really are different TPAs.
+Check that "BENEFITS HEALTHSMART" and "Healthsmart" really are different TPAs.
 
 **Portal characters.** The payer "GEHA (Government Employees Health Association, Inc.)" has parentheses, which the portal rejects in name fields. Use **Fix** when entering it, or reword it in **Admin → Lists**.
 
@@ -398,6 +438,8 @@ The **Settings** tab has one row per key. Edits take effect within a minute.
 | `PortalSessionMinutes` | `60` | The portal's inactivity time-out (copy desk timer) |
 | `PortalWarnMinutes` | `50` | When the copy desk timer warns |
 | `StagingDays` | `7` | Days before staged uploads of never-saved disputes and lines are deleted |
+| `NotifyAdminsOnRequest` | `Yes` | Email every active Admin when someone requests access |
+| `NotifyRequester` | `Yes` | Email the person when their access request is approved or rejected |
 
 The Settings tab and **Admin → Settings & fields** check every value. An invalid or unknown value is ignored: the default above is used, and a warning shows in Admin.
 
@@ -465,7 +507,6 @@ The demo data is all synthetic:
 ## Limits and open questions
 
 - **Open question:** is TX on CMS's Complex State list? If it is, set `ComplexStates` to `TX`, and every line will ask for the state-specific attestation.
-- **Open question:** what should a facility enter as "Hospital, Health Care Facility or Group Name"? It is now required, and the notices left it blank for Silver Alliance. The demo uses the facility's own name.
 - **Prepared ahead.** A dispute can go to the US desk before day 31, but it can only be filed from day 31. After day 34 it needs an extension reason to go to the US desk at all.
 - **Alert texts.** The guide shows the portal's alerts for "prior to 1/1/2022" and "consent to waive" only as pictures. The Studio uses its own wording.
 - **Batches with several start dates.** The open negotiation start date is entered once per dispute, as in the portal. The Studio cannot check that a notice was uploaded for each distinct start date.
