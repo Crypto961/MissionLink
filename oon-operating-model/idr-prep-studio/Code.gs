@@ -761,7 +761,8 @@ function requireRole_() {
 function requireEditorOrAdmin_(allowTrigger) {
   const email = String(Session.getActiveUser().getEmail() || '');
   if (!email && allowTrigger) return;
-  if (!activeUsers_().length) return; // first setup
+  // First setup (no active member yet): only the account the script runs as (the editor, or the web app's owner).
+  if (!activeUsers_().length) { if (email && email.toLowerCase() === effectiveUser_()) return; throw new Error('Only an Admin can run this.'); }
   const u = userOf_(email);
   if (!u || u.Role !== ROLES.admin) throw new Error('Only an Admin can run this.');
 }
@@ -868,7 +869,7 @@ function saveDispute(payload) {
     rec.UpdatedBy = user;
     rec.UpdatedAt = now;
     if (rowNum === -1) appendRecords_(TABS.disputes, [rec]); else writeRecord_(TABS.disputes, rowNum, rec);
-    if (rowNum === -1 && payload.draftToken) relinkDraft_(payload.draftToken, id);
+    if (rowNum === -1 && payload.draftToken) relinkDraft_(payload.draftToken, id, u);
     learnRecord_(fields, values, old, rec);
     learnFlush_();
     log_(id, 'save', payload.page || '');
@@ -939,7 +940,7 @@ function storeLines_(id, items, u) {
     let found = -1;
     all.forEach(function (r, i) { if (r.DisputeID === id && Number(r.LineNo) === Number(lineNo)) found = i + 2; });
     olds.push(found === -1 ? {} : Object.assign({}, all[found - 2]));
-    if (found === -1) adds.push(rec); else dirty[found] = rec;
+    if (found === -1) adds.push(rec); else dirty[found] = Object.assign({}, all[found - 2], rec); // keeps columns not in the schema
     out.push({ lineNo: Number(lineNo), rec: rec, values: it.values || {}, lineKey: it.lineKey });
   });
   appendRecords_(TABS.lines, adds);
@@ -1003,14 +1004,16 @@ function relinkLineFiles_(id, lineKey, lineNo, claim, lines) {
   appendRecords_(TABS.files, copies);
 }
 
-// The first save of a new dispute: its staged files (DisputeID = the draft token) move to the dispute.
-function relinkDraft_(token, id) {
+// The first save of a new dispute: its staged files (DisputeID = the draft token) move to the dispute. Only the
+// files the saving user staged move; an upload still running finds the new dispute through the cache (storeFile_).
+function relinkDraft_(token, id, u) {
   if (String(token).indexOf(DRAFT_PREFIX) !== 0) return;
+  CacheService.getScriptCache().put('draft:' + token, id, 21600);
   const t = table_(TABS.files);
   const dirty = {};
   const moved = {};
   t.rows.forEach(function (r, i) {
-    if (r.DisputeID !== token) return;
+    if (r.DisputeID !== token || (u && !uploadedBy_(r, u))) return;
     dirty[i + 2] = Object.assign({}, r, { DisputeID: id });
     if (!moved[r.FileId]) {
       moved[r.FileId] = true;
@@ -1046,6 +1049,13 @@ function disputeFileBytes_(files) {
 
 function isDraftToken_(v) { return /^DRAFT-[A-Za-z0-9-]{6,}$/.test(String(v || '')); }
 
+function uploadedBy_(r, u) { return String(r.UploadedBy || '').trim().toLowerCase() === u.Email; }
+
+// A draft token belongs to the member who staged its files: nobody else adds to, removes from or saves it.
+function assertOwnDraft_(token, u) {
+  if (filesOf_(token).some(function (r) { return !uploadedBy_(r, u); })) throw new Error('These files belong to another user\'s new dispute.');
+}
+
 /**
  * Stores one uploaded file. target: a dispute id, or the draft token of a dispute not saved yet (the file waits in the
  * Staging folder). lineNo: a saved line; lineKey: a line not saved yet. data is base64 without the data: prefix. With
@@ -1056,7 +1066,7 @@ function uploadFile(target, category, lineNo, name, mimeType, data, sameClaim, l
   const u = requireRole_(ROLES.admin, ROLES.lb);
   if (!target) throw new Error('No dispute to attach the file to.');
   if (['portal_confirmation', 'confirmation_pdf'].indexOf(category) !== -1) throw new Error('That document is added by the app.');
-  if (!isDraftToken_(target)) withLock_(function () { assertCanEdit_(target, u); });
+  withLock_(function () { if (isDraftToken_(target)) assertOwnDraft_(target, u); else assertCanEdit_(target, u); });
   return storeFile_(target, category, lineNo, name, mimeType, data, sameClaim, lineKey);
 }
 
@@ -1068,9 +1078,16 @@ function storeFile_(target, category, lineNo, name, mimeType, data, sameClaim, l
   if (PORTAL_FILE_CATEGORIES.indexOf(category) !== -1 && disputeFileBytes_(filesOf_(target)) + bytes.length > st.DisputeMaxMb * MB) {
     throw new Error(st.DisputeMaxMb === 500 ? MSG.fileLimit : 'The files of one dispute must stay under ' + st.DisputeMaxMb + ' MB.');
   }
-  const draft = isDraftToken_(target);
+  let draft = isDraftToken_(target);
   const file = (draft ? stagingFolder_(target) : disputeFolder_(target)).createFile(Utilities.newBlob(bytes, mimeType || 'application/octet-stream', name));
   return withLock_(function () {
+    // The dispute was saved (and its staged files relinked) while this file was uploading: it goes to the dispute.
+    const saved = draft ? CacheService.getScriptCache().get('draft:' + target) : null;
+    if (saved) {
+      try { DriveApp.getFileById(file.getId()).moveTo(disputeFolder_(saved)); } catch (e) { /* the Files row still points to it */ }
+      target = saved;
+      draft = false;
+    }
     const pending = !lineNo && !!lineKey;
     const rec = fileRecord_(target, category, lineNo, name, file, bytes.length);
     if (pending) { rec.LineKey = String(lineKey); rec.SameClaim = sameClaim && category === 'qpa' ? 'Yes' : ''; }
@@ -1095,14 +1112,15 @@ function storeFile_(target, category, lineNo, name, mimeType, data, sameClaim, l
 function removeFile(target, fileId, lineNo, lineKey) {
   const u = requireRole_(ROLES.admin, ROLES.lb);
   return withLock_(function () {
-    if (!isDraftToken_(target)) assertCanEdit_(target, u);
+    if (isDraftToken_(target)) assertOwnDraft_(target, u); else assertCanEdit_(target, u);
     const mine = function (r) {
       return (lineNo && Number(r.LineNo) === Number(lineNo)) || (lineKey && r.LineKey === lineKey && String(r.LineNo) === '');
     };
     const uses = filesOf_(target).filter(function (r) { return r.FileId === fileId; });
+    if (!uses.length) return filesOf_(target); // not a file of this dispute or draft: never trash it
     const onlyLine = (!!lineNo || !!lineKey) && uses.length > 1 && uses.some(mine);
     deleteWhere_(TABS.files, function (r) { return r.DisputeID === target && r.FileId === fileId && (!onlyLine || mine(r)); });
-    if (!onlyLine) {
+    if (!onlyLine && !rows_(table_(TABS.files)).some(function (r) { return r.FileId === fileId; })) {
       try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) { /* already gone */ }
     }
     log_(isDraftToken_(target) ? '' : target, onlyLine ? 'file-unlinked' : 'file-removed', fileId + (onlyLine ? ' line ' + (lineNo || lineKey) : ''));
@@ -1199,6 +1217,7 @@ function markFiled(id, portalNumber, portalPdf, notice) {
   assertWindowOpen_(readyDispute_(id));
   const pdfUrl = storeFile_(id, 'portal_confirmation', '', portalPdf.name, portalPdf.mimeType, portalPdf.data).url;
   withLock_(function () {
+    readyDispute_(id); // another US Member may have filed or returned it meanwhile
     setCells_(id, { Status: STATUS.filed, FiledBy: currentUser_(), FiledAt: nowStr_(),
       PortalDisputeNumber: safe_(portalNumber), PortalPdfUrl: pdfUrl, nip_notified_date: nDate, nip_notified_method: nMethod,
       idre_status: optValue_('IdreStatus', 'pending') });
@@ -1317,8 +1336,10 @@ function learnRecord_(fields, values, old, rec) {
     const before = (f.multi ? splitMulti_(old[f.key]) : [String(old[f.key] || '')]).map(optionKey_);
     (f.multi ? splitMulti_(now) : [now]).forEach(function (v) {
       const isNew = before.indexOf(optionKey_(v)) === -1;
-      // A value the portal would refuse is saved on the draft but never becomes a suggestion.
-      if (isNew && !knownValue_(f, v) && invalidNew_(f, v)) return;
+      // A value the portal would refuse is saved on the draft but never becomes a suggestion. (A member's name typed in a
+      // people box is known but not an email: it is not added to the list either.)
+      const listed = (options_()[f.options] || []).some(function (x) { return optionKey_(x) === optionKey_(v); });
+      if (isNew && !listed && invalidNew_(f, v)) return;
       if (isNew || data) learn_(f.options, v, data, !isNew);
     });
   });
@@ -1745,6 +1766,8 @@ function adminSaveUser(user) {
     if (!admins.length && (!active || role !== ROLES.admin) && cur && cur.Active && cur.Role === ROLES.admin) {
       throw new Error('This is the last active Admin. Add another Admin first.');
     }
+    // Before the first member (the script owner is Admin only while nobody is active): the first one must be an active Admin.
+    if (!admins.length && !(active && role === ROLES.admin)) throw new Error('There would be no active Admin. Add an Admin first.');
     const rec = { Email: email, Name: safe_(user.name == null ? (cur ? cur.Name : '') : user.name).trim(), Role: role,
       Team: safe_(user.team == null ? (cur ? cur.Team : '') : user.team).trim(), Active: active ? 'Yes' : 'No',
       Notes: safe_(user.notes == null ? (cur ? cur.Notes : '') : user.notes) };
@@ -1756,6 +1779,9 @@ function adminSaveUser(user) {
     }
     log_('', 'user', email + ': ' + role + (active ? '' : ' (inactive)') + (rec.Team ? ', team ' + rec.Team : ''));
     clearUsersCache_();
+    // An admin's change ends a demo view switch (DemoData.gs), so the member cannot switch back to Admin on their own.
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('DEMO_SWITCH_EMAIL') === email) props.deleteProperty('DEMO_SWITCH_EMAIL');
   });
   return listUsers_(); // no second role check: an admin may have just changed their own role
 }
@@ -3173,12 +3199,16 @@ function seedOptions_() {
   const rows = readTab_(TABS.options);
   const have = {};
   const exact = {};
+  const keyed = {};
   rows.forEach(function (r) {
     exact[r.List + '|' + r.Value] = true;
     if (!parseData_(r.Data).mergedInto) have[r.List + '|' + optionKey_(r.Value)] = true;
+    if (String(r.Key || '').trim()) keyed[r.List + '|' + String(r.Key).trim()] = true;
   });
   const add = [];
   seedRows_().forEach(function (s) {
+    // An option an admin reworded keeps its Key: the old built-in text is not added back.
+    if (s[6] && keyed[s[0] + '|' + s[6]]) return;
     const alias = !!(s[3] && s[3].mergedInto);
     // An alias row ("Health Now" for "HealthNow") is matched on its exact spelling.
     if (alias ? exact[s[0] + '|' + s[1]] : have[s[0] + '|' + optionKey_(s[1])]) return;

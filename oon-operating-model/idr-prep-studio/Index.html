@@ -712,7 +712,14 @@
     function holidaySet() {
       if (S.hol) return S.hol;
       S.hol = {};
-      entries('Holiday').forEach(function (o) { S.hol[String(o.v).slice(0, 10)] = true; });
+      // Same readings as holidays_(): a Sheets date serial, M/D/YYYY or YYYY-MM-DD.
+      entries('Holiday').forEach(function (o) {
+        var v = String(o.v).trim();
+        if (/^\d{5}$/.test(v)) v = new Date(Math.round((Number(v) - 25569) * 86400000)).toISOString().slice(0, 10);
+        var us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (us) v = us[3] + '-' + ('0' + us[1]).slice(-2) + '-' + ('0' + us[2]).slice(-2);
+        if (/^\d{4}-\d{2}-\d{2}/.test(v)) S.hol[v.slice(0, 10)] = true;
+      });
       return S.hol;
     }
     function isoToUtc(iso) { var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; }

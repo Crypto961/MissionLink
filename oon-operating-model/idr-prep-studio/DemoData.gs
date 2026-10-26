@@ -252,6 +252,8 @@ function demoSetRole_(role) {
     log_('', 'user', me + ': ' + role + ' (demo view switch)');
   });
   clearUsersCache_();
+  // Back to Admin: the switch is over, so a later demotion by another admin cannot be undone with demoUseAdminView().
+  if (role === ROLES.admin) props.deleteProperty('DEMO_SWITCH_EMAIL');
   Logger.log(me + ' is now ' + role + '. Reload the web app.');
 }
 
