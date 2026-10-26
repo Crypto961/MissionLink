@@ -3251,9 +3251,11 @@ function applySeedAliases_() {
 
 /** Adds the seed billing entities that are missing (name or alias, ignoring case and punctuation). Returns how many. */
 function seedEntities_() {
-  const rows = readTab_(TABS.entities);
+  // Index i of table rows is sheet row i + 2 (blank rows included, so the row numbers hold).
+  const rows = table_(TABS.entities).rows;
   const at = {};
   rows.forEach(function (r, i) {
+    if (!String(r.Name || '').trim()) return;
     at[optionKey_(r.Name)] = i;
     splitAliases_(r.Aliases).forEach(function (a) { at[optionKey_(a)] = i; });
   });

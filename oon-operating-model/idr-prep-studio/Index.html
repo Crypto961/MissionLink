@@ -834,7 +834,7 @@
         var auto = f.auto ? autoValue(f, rec) : null;
         var locked = auto && auto.confirmed && editable() && !S.unlocked[f.key] && (isEmpty(v) || String(v) === auto.value);
         if (locked && isEmpty(v)) { rec[f.key] = auto.value; v = auto.value; picked = [v]; if (rec === S.d) S.pending[f.key] = v; }
-        if (auto && !auto.confirmed && String(v) === auto.value) label += '<span class="chip guess" title="First guess from the legal name: PLLC = provider, LLC = facility">guess from the name: check it</span>';
+        if (auto && !auto.confirmed && String(v) === auto.value) label += '<span class="chip guess" title="This billing entity was added from a saved dispute and is not confirmed yet">not confirmed: check it</span>';
         h += '<div class="lbl">' + label + '</div>';
         if (locked) {
           h += '<div class="locked"><span class="lock">Locked</span><span data-locked-value>' + esc(v) + '</span><span class="muted" style="font-weight:400">from ' + esc(auto.from) +
@@ -1120,7 +1120,7 @@
       if (!known) hint.textContent = 'New value: it is added to the list when you save.';
     }
 
-    // I am a(n) always follows the billing entity picked: locked when a saved dispute confirmed it, a guess to check otherwise.
+    // I am a(n) always follows the billing entity picked: locked when the entity is confirmed, to check otherwise (entities learned from a dispute).
     function syncEntityAuto(container, entity) {
       var box = container.querySelector('.f[data-key="q_acting_as"]');
       if (!box || S.unlocked.q_acting_as) return;
@@ -1140,7 +1140,7 @@
       } else {
         if (lock) lock.classList.add('hidden');
         choices.classList.remove('hidden');
-        if (!auto.confirmed) lbl.insertAdjacentHTML('beforeend', '<span class="chip guess" title="First guess from the legal name: PLLC = provider, LLC = facility">guess from the name: check it</span>');
+        if (!auto.confirmed) lbl.insertAdjacentHTML('beforeend', '<span class="chip guess" title="This billing entity was added from a saved dispute and is not confirmed yet">not confirmed: check it</span>');
       }
       box.classList.remove('err');
       box.querySelector('.msg').textContent = '';
@@ -1222,13 +1222,15 @@
       return all;
     }
 
-    // Moving forward is allowed only when every page before the target is complete and no line item is left unsaved.
-    // Returns null when the move is allowed, else { page, message }. Back and read-only disputes are never blocked.
+    // Moving forward (Continue, Ctrl+Enter, a later step) is allowed only up to the first page with issues, and never
+    // past a line being edited. Returns null when the move is allowed, else { page, message, dirty? }. Back is never
+    // blocked, nor are read-only disputes. Notices (like "Filing window opens") are warnings, not issues. The server
+    // checks everything again when the dispute is sent to the US desk.
     function forwardBlock(target) {
       if (target <= S.page || !editable()) return null;
-      if (S.page === 4 && (S.line !== null || S.paste !== null)) {
-        return { page: 4, message: S.line !== null ? 'Save the open line item (Save line item) or Cancel it before you continue.' :
-          'Add the pasted lines or cancel the paste before you continue.' };
+      if (S.page === 4 && lineDirty()) return { page: 4, dirty: true, message: 'Save or discard the line you are editing.' };
+      if (S.page === 4 && S.paste !== null && String(S.paste.text || '').trim()) {
+        return { page: 4, message: 'Add the pasted lines or cancel the paste before you continue.' };
       }
       for (var k = 0; k < target; k++) {
         var list = pageIssues(k);
@@ -1237,12 +1239,62 @@
       return null;
     }
 
-    // Shows why a forward move was refused and opens the page that needs fixing.
+    // True when the open line form has input that is not saved (typed changes, or files attached to a new line).
+    function lineDirty() {
+      if (S.line === null || !S.lineForm) return false;
+      var form = app.querySelector('[data-line-form]');
+      if (!form) return false;
+      if (JSON.stringify(readFields(form, S.lineForm.fields)) !== S.lineForm.snap) return true;
+      return !S.line.LineNo && !!S.line.lineKey && filesFor('qpa', null, S.line.lineKey).length > 0;
+    }
+
+    // Shows why a forward move was refused: the list of issues on the page that needs fixing (focused), or, for a line
+    // being edited, a bar with Save line and Discard (the typed input stays).
     function refuseForward(block) {
-      S.blocked = block.page === 4 ? (S.line !== null || S.paste !== null ? [block.message] : linesIssues()) : null;
+      toast(block.message, true);
+      if (block.dirty) { showDirtyBar(); return; }
+      S.blocked = { page: block.page };
       if (block.page !== S.page) { S.page = block.page; S.line = null; S.paste = null; }
       render();
-      toast(block.message, true);
+      focusFirstIssue();
+    }
+
+    function showDirtyBar() {
+      var form = app.querySelector('[data-line-form]');
+      if (!form) return;
+      var bar = form.querySelector('[data-dirty-bar]');
+      if (!bar) {
+        form.insertAdjacentHTML('afterbegin', '<div class="problems" data-dirty-bar><b>Save or discard the line you are editing.</b> ' +
+          '<span class="row-actions" style="display:inline-flex;margin-left:8px"><button class="primary" data-dirty-save>Save line</button>' +
+          '<button class="ghost" data-dirty-discard>Discard</button></span></div><br>');
+        bar = form.querySelector('[data-dirty-bar]');
+        bar.querySelector('[data-dirty-save]').addEventListener('click', function (e) { e.preventDefault(); var b = form.querySelector('#save'); if (b) b.click(); });
+        bar.querySelector('[data-dirty-discard]').addEventListener('click', function (e) { e.preventDefault(); S.line = null; S.lineForm = null; render(); });
+      }
+      bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Highlights the fields of the open page that have issues and puts the cursor in the first one.
+    function focusFirstIssue() {
+      var card = app.querySelector('.card');
+      if (!card) return;
+      if (S.page <= 3 || S.page === 5) {
+        var fields = pageFields(pageAt(S.page));
+        showErrors(card, fields, S.d, ctxFor(S.d));
+      }
+      var first = card.querySelector('.f.err input, .f.err select, .f.err textarea') || card.querySelector('.problems');
+      if (first) {
+        first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (first.focus) first.focus({ preventScroll: true });
+      }
+    }
+
+    // The live list of what blocks Continue on the open page (shown after a refused move until it is empty).
+    function blockedBox() {
+      if (!S.blocked || S.blocked.page !== S.page) return '';
+      var list = pageIssues(S.page);
+      if (!list.length) { S.blocked = null; return ''; }
+      return problemBox(list, 'Fix these before you continue:');
     }
 
     // ---------------------------------------------------------------- file uploads
@@ -1380,6 +1432,11 @@
 
     // Ctrl+S (Cmd+S) saves the open page or line.
     document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        var cont = app.querySelector('#cont');
+        if (cont && !cont.disabled && S.view === 'edit') { e.preventDefault(); cont.click(); }
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         if (S.save) S.save(); else toast('Nothing to save on this screen.');
@@ -1477,7 +1534,7 @@
 
     function footer(opts) {
       return '<div class="actions sticky"><div class="right"><button class="ghost" id="exit2">Exit</button>' +
-        (opts.back ? '<button class="secondary" id="back">Back</button>' : '') + '<span class="keys">Enter: next field · Ctrl+S: save</span></div><div class="right">' +
+        (opts.back ? '<button class="secondary" id="back">Back</button>' : '') + '<span class="keys">Enter: next field · Ctrl+S: save · Ctrl+Enter: continue</span></div><div class="right">' +
         (opts.extra || '') + (opts.save ? '<button class="secondary" id="save-page">Save</button>' : '') +
         (opts.next ? '<button class="primary" id="cont">' + esc(opts.next) + '</button>' : '') + '</div></div>';
     }
@@ -1491,11 +1548,11 @@
           var target = Number(b.getAttribute('data-step'));
           var block = forwardBlock(target);
           if (block) { refuseForward(block); return; }
-          S.page = target; S.line = null; S.paste = null; S.blocked = null; render();
+          S.page = target; S.line = null; S.lineForm = null; S.paste = null; S.blocked = null; render();
         });
       });
       var back = app.querySelector('#back');
-      if (back) back.addEventListener('click', function () { S.page--; S.line = null; S.paste = null; S.blocked = null; render(); });
+      if (back) back.addEventListener('click', function () { S.page--; S.line = null; S.lineForm = null; S.paste = null; S.blocked = null; render(); });
     }
 
     function renderEditor() {
@@ -1546,6 +1603,7 @@
           return '<div class="f half"><div class="lbl"><span class="req">*</span> ' + esc(a.label) + '</div><div class="locked"><span class="lock">Auto</span>' + esc(v) + '</div></div>';
         }).join('') + '</div>';
       }
+      inner = blockedBox() + inner;
       if (page.id === 'dtype' && S.lines.length) inner += '<div class="warn">If you change the dispute type, the portal asks you to enter the line items again. Check page 5 after saving.</div>';
       inner += footer({ back: S.page > 0, save: editable(), next: editable() ? 'Save & Continue' : 'Continue' });
       app.innerHTML = editorShell(inner, page.step, page.title);
@@ -1562,10 +1620,8 @@
         if (!editable()) { if (next) { S.page++; render(); } return; }
         var values = Object.assign({}, S.pending, readFields(card, fields));
         var rec = Object.assign({}, S.d, values);
-        var bad = showErrors(card, fields, rec, ctxFor(rec));
-        if (bad && next) { toast('Fix the highlighted fields to continue, or Save to keep your work.', true); return; }
+        showErrors(card, fields, rec, ctxFor(rec));
         if (pendingSuggestion(card)) return;
-        var missingFile = fields.some(function (f) { return f.type === 'file' && fieldRequired(f, rec, ctxFor(rec)) && !filesFor(f.category).length; });
         busy(true);
         call('saveDispute', { id: S.id, values: values, page: page.id, draftToken: S.id ? '' : S.draftToken }).then(function (r) {
           S.id = r.id;
@@ -1574,8 +1630,10 @@
           learnLocal(fields, values);
           apply(r.bundle);
           busy(false);
-          if (next && missingFile) { toast('Saved. Upload the required document before continuing.', true); render(); return; }
-          if (next) S.page++;
+          // Saved either way (a draft can have gaps); Continue moves on only when the page has no issue.
+          var block = next ? forwardBlock(S.page + 1) : null;
+          if (block) { refuseForward(block); return; }
+          if (next) { S.page++; S.blocked = null; }
           render();
           toast('Saved');
         }).catch(fail);
@@ -1643,9 +1701,8 @@
       var inner = '<div class="kind-note"><b>' + esc(S.d.dispute_kind || 'Dispute type not set') + '.</b> ' + esc(kindNote()) + '</div>';
       inner += '<h3>Summary of Qualified Items and/or Services</h3>' + linesGrid();
       var rulesNow = lineRules(S.d, S.lines).concat(repeatsWithin(S.lines));
-      // Once the line form is closed, the list of things to fix stays live until it is empty.
-      if (S.blocked && S.line === null && S.paste === null) S.blocked = linesIssues().length ? linesIssues() : null;
-      if (S.blocked && S.blocked.length) inner += problemBox(S.blocked, 'Fix these before you continue:');
+      var blocked = blockedBox();
+      if (blocked) inner += blocked;
       else if (S.lines.length) inner += problemBox(rulesNow, 'Line item rules to fix:');
       inner += warnBox(S.warnings);
       if (S.line === null && S.paste === null) {
@@ -1682,7 +1739,7 @@
       app.querySelector('#cont').addEventListener('click', function () {
         var block = forwardBlock(5);
         if (block) { refuseForward(block); return; }
-        S.page = 5; S.line = null; S.paste = null; S.blocked = null; render();
+        S.page = 5; S.line = null; S.lineForm = null; S.paste = null; S.blocked = null; render();
       });
       if (S.paste !== null) wirePaste(card);
       if (S.line !== null) wireLineForm(card);
@@ -1720,6 +1777,8 @@
       var ctx = ctxFor(S.d);
       wireForm(form, fields, rec, ctx);
       wireAmounts(form);
+      // What the form held when it opened: Continue is refused while the line differs from it (see lineDirty).
+      S.lineForm = { fields: fields, snap: JSON.stringify(readFields(form, fields)) };
 
       // "Uses line N's documentation" when another line has the same claim number.
       var claimInput = form.querySelector('.f[data-key="claim_number"] input');
@@ -1736,7 +1795,7 @@
       // Files picked on a new line are kept under its line key and linked when the line is saved.
       wireUploads(form, function () { return { lineNo: S.line && S.line.LineNo, lineKey: S.line && !S.line.LineNo ? S.line.lineKey : '' }; });
 
-      form.querySelector('#cancel').addEventListener('click', function () { S.line = null; render(); });
+      form.querySelector('#cancel').addEventListener('click', function () { S.line = null; S.lineForm = null; render(); });
       if (form.querySelector('#del')) form.querySelector('#del').addEventListener('click', function () {
         if (!confirm('Delete line ' + lineNo + '?')) return;
         busy(true);
